@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://antam.local/contracts/clinic-event.schema.json",
+  "title": "Clinic event envelope",
+  "oneOf": [
+    { "$ref": "#/$defs/AppointmentBooked" },
+    { "$ref": "#/$defs/AppointmentRescheduled" },
+    { "$ref": "#/$defs/AppointmentCancelled" },
+    { "$ref": "#/$defs/PatientCheckedIn" },
+    { "$ref": "#/$defs/ClinicalRecordSigned" }
+  ],
+  "$defs": {
+    "Envelope": {
+      "type": "object",
+      "required": ["eventId", "eventType", "schemaVersion", "occurredAt", "aggregateId", "aggregateVersion", "correlationId", "payload"],
+      "properties": {
+        "eventId": { "type": "string", "format": "uuid" },
+        "eventType": { "type": "string" },
+        "schemaVersion": { "const": 1 },
+        "occurredAt": { "type": "string", "format": "date-time" },
+        "aggregateId": { "type": "string", "format": "uuid" },
+        "aggregateVersion": { "type": "integer", "minimum": 1 },
+        "correlationId": { "type": "string", "minLength": 1 },
+        "payload": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "AppointmentPayload": {
+      "type": "object",
+      "required": ["appointmentId", "patientId", "doctorId"],
+      "properties": {
+        "appointmentId": { "type": "string", "format": "uuid" },
+        "patientId": { "type": "string", "format": "uuid" },
+        "doctorId": { "type": "string", "format": "uuid" },
+        "chairId": { "type": "string", "format": "uuid" },
+        "scheduledAt": { "type": "string", "format": "date-time" },
+        "durationMinutes": { "type": "integer", "minimum": 15, "multipleOf": 15 },
+        "status": { "type": "string" },
+        "patientEmail": { "type": "string", "format": "email" }
+      },
+      "additionalProperties": false
+    },
+    "AppointmentBooked": {
+      "allOf": [ { "$ref": "#/$defs/Envelope" }, { "properties": { "eventType": { "const": "AppointmentBooked.v1" }, "payload": { "$ref": "#/$defs/AppointmentPayload" } } } ]
+    },
+    "AppointmentRescheduled": {
+      "allOf": [ { "$ref": "#/$defs/Envelope" }, { "properties": { "eventType": { "const": "AppointmentRescheduled.v1" }, "payload": { "$ref": "#/$defs/AppointmentPayload" } } } ]
+    },
+    "AppointmentCancelled": {
+      "allOf": [ { "$ref": "#/$defs/Envelope" }, { "properties": { "eventType": { "const": "AppointmentCancelled.v1" }, "payload": { "$ref": "#/$defs/AppointmentPayload" } } } ]
+    },
+    "PatientCheckedIn": {
+      "allOf": [ { "$ref": "#/$defs/Envelope" }, { "properties": { "eventType": { "const": "PatientCheckedIn.v1" }, "payload": { "$ref": "#/$defs/AppointmentPayload" } } } ]
+    },
+    "ClinicalRecordSigned": {
+      "allOf": [
+        { "$ref": "#/$defs/Envelope" },
+        {
+          "properties": {
+            "eventType": { "const": "ClinicalRecordSigned.v1" },
+            "payload": {
+              "type": "object",
+              "required": ["clinicalRecordId", "appointmentId", "patientId", "doctorId", "signedAt"],
+              "properties": {
+                "clinicalRecordId": { "type": "string", "format": "uuid" },
+                "appointmentId": { "type": "string", "format": "uuid" },
+                "patientId": { "type": "string", "format": "uuid" },
+                "doctorId": { "type": "string", "format": "uuid" },
+                "signedAt": { "type": "string", "format": "date-time" }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    }
+  }
+}

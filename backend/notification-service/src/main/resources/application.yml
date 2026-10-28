@@ -1,0 +1,36 @@
+server.port: ${SERVER_PORT:8085}
+spring:
+  application.name: notification-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/notification_db}
+    username: ${DB_USER:notification_app}
+    password: ${DB_PASSWORD:notification_local}
+  flyway.locations: classpath:db/migration
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:clinic}
+    password: ${RABBITMQ_PASSWORD:clinic_local}
+    listener.simple.retry.enabled: true
+    listener.simple.retry.max-attempts: 5
+    listener.simple.retry.initial-interval: 1s
+    listener.simple.retry.multiplier: 2
+    listener.simple.retry.max-interval: 10s
+    listener.simple.default-requeue-rejected: false
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}
+    properties.mail.smtp.auth: false
+    properties.mail.smtp.starttls.enable: false
+management:
+  endpoints.web.exposure.include: health,info,prometheus
+  endpoint.health.probes.enabled: true
+security:
+  resource-server.enabled: true
+  issuer: ${JWT_ISSUER:http://identity-service:8081}
+  audience: ${JWT_AUDIENCE:clinic-api}
+  jwks-uri: ${JWT_JWKS_URI:http://identity-service:8081/.well-known/jwks.json}
+app.mail.from: ${MAIL_FROM:no-reply@antam.local}
+events:
+  enabled: true
+  consumer.enabled: true

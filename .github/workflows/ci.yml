@@ -1,0 +1,39 @@
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21', cache: maven }
+      - run: ./mvnw -B verify
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24.22.1', cache: pnpm, cache-dependency-path: frontend/web/pnpm-lock.yaml }
+      - uses: pnpm/action-setup@v4
+        with: { version: '12.15.0' }
+      - run: pnpm --dir frontend/web install --frozen-lockfile
+      - run: pnpm --dir frontend/web api:generate
+      - run: git diff --exit-code -- frontend/web/src/lib/api.generated.ts
+      - run: pnpm --dir frontend/web lint
+      - run: pnpm --dir frontend/web typecheck
+      - run: pnpm --dir frontend/web build
+      - name: Create ephemeral local credentials
+        shell: pwsh
+        run: ./scripts/bootstrap.ps1 -Quiet
+      - name: Start the full demo stack
+        run: docker compose --env-file .env -f infrastructure/compose/docker-compose.yml up --build --wait --wait-timeout 300 -d
+      - run: pnpm --dir frontend/web exec playwright install --with-deps chromium
+      - name: Run real cross role clinic flow
+        run: pnpm --dir frontend/web exec playwright test
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+      - name: Stop demo stack and remove test data
+        if: always()
+        run: if [ -f .env ]; then docker compose --env-file .env -f infrastructure/compose/docker-compose.yml down --volumes --remove-orphans; fi

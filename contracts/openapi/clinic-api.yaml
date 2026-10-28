@@ -1,0 +1,1025 @@
+openapi: 3.1.0
+info:
+  title: An Tam Dental Clinic API
+  version: 1.0.0
+  description: Public REST contract routed through api-gateway. All timestamps are UTC ISO-8601.
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+tags:
+  - name: Identity
+  - name: Patients
+  - name: Scheduling
+  - name: Clinical
+paths:
+  /api/v1/auth/login:
+    post:
+      tags: [Identity]
+      security: []
+      summary: Sign in and issue short lived access and rotating refresh tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+      responses:
+        '200':
+          description: Token pair and user identity
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+  /api/v1/auth/refresh:
+    post:
+      tags: [Identity]
+      security: []
+      summary: Rotate refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties: { refreshToken: { type: string } }
+      responses:
+        '200':
+          description: Rotated token pair
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '401': { $ref: '#/components/responses/Problem' }
+  /api/v1/patients:
+    get:
+      tags: [Patients]
+      summary: Search administrative patient records (staff only)
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: Patient page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PatientPage' }
+        '403': { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [Patients]
+      summary: Create a patient administrative record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePatient' }
+      responses:
+        '201':
+          description: Created patient summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PatientSummary' }
+        '400': { $ref: '#/components/responses/Problem' }
+  /api/v1/patients/me:
+    get:
+      tags: [Patients]
+      summary: Resolve the patient's explicitly linked record
+      responses:
+        '200':
+          description: Linked patient summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PatientSummary' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /api/v1/patients/{id}/account-link:
+    get:
+      tags: [Patients]
+      summary: Read patient account link status (manager only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Link status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountLink' }
+    post:
+      tags: [Patients]
+      summary: Link a previously verified PATIENT account (manager only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties: { userId: { type: string, format: uuid } }
+      responses:
+        '201':
+          description: Linked account
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountLink' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/admin/users:
+    get:
+      tags: [Identity]
+      summary: Search accounts (SUPER_ADMIN and CLINIC_MANAGER)
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: User accounts with role codes; password fields are never returned
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/UserAccount' } }
+    post:
+      tags: [Identity]
+      summary: Create a staff or patient account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, fullName, password, roles]
+              properties:
+                email: { type: string, format: email }
+                fullName: { type: string, maxLength: 200 }
+                password: { type: string, minLength: 12, maxLength: 128, format: password }
+                roles: { type: array, minItems: 1, items: { type: string, enum: [SUPER_ADMIN, CLINIC_MANAGER, DOCTOR, RECEPTIONIST, ASSISTANT, PATIENT] } }
+      responses:
+        '201':
+          description: Created account
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserAccount' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/admin/users/{id}/roles:
+    put:
+      tags: [Identity]
+      summary: Replace the account role set
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [roles], properties: { roles: { type: array, minItems: 1, items: { type: string } } } }
+      responses:
+        '200':
+          description: Updated account
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserAccount' }
+        '403': { $ref: '#/components/responses/Problem' }
+  /api/v1/admin/users/{id}/status:
+    put:
+      tags: [Identity]
+      summary: Activate, suspend, or disable an account
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [status], properties: { status: { type: string, enum: [ACTIVE, SUSPENDED, DISABLED] } } }
+      responses:
+        '200':
+          description: Updated account; non-active status revokes refresh tokens
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserAccount' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/catalog/services:
+    get:
+      tags: [Scheduling]
+      summary: List active appointment services
+      responses:
+        '200':
+          description: Service catalog
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/ServiceSummary' } }
+  /api/v1/catalog/doctors:
+    get:
+      tags: [Scheduling]
+      summary: List bookable doctors
+      responses:
+        '200':
+          description: Bookable doctor catalog
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/DoctorSummary' } }
+  /api/v1/catalog/chairs:
+    get:
+      tags: [Scheduling]
+      summary: List active chairs
+      responses:
+        '200':
+          description: Active chair catalog
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/ChairSummary' } }
+  /api/v1/admin/scheduling/catalog:
+    get:
+      tags: [Scheduling]
+      summary: Read the clinic scheduling configuration (manager only)
+      responses:
+        '200':
+          description: Services, doctors, chairs, working hours, leave requests, and closures
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SchedulingCatalog' }
+        '403': { $ref: '#/components/responses/Problem' }
+  /api/v1/admin/scheduling/services:
+    post:
+      tags: [Scheduling]
+      summary: Create a service catalog entry (manager only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name, price, durationMinutes, active]
+              properties:
+                code: { type: string, maxLength: 40, pattern: '^[A-Za-z0-9_-]+$' }
+                name: { type: string, maxLength: 160 }
+                description: { type: [string, 'null'], maxLength: 2000 }
+                price: { type: number, minimum: 0 }
+                durationMinutes: { type: integer, minimum: 15, maximum: 480, multipleOf: 15 }
+                active: { type: boolean }
+      responses:
+        '201':
+          description: Created service
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminService' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/admin/scheduling/services/{id}:
+    put:
+      tags: [Scheduling]
+      summary: Update a service catalog entry (manager only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name, price, durationMinutes, active]
+              properties:
+                code: { type: string, maxLength: 40, pattern: '^[A-Za-z0-9_-]+$' }
+                name: { type: string, maxLength: 160 }
+                description: { type: [string, 'null'], maxLength: 2000 }
+                price: { type: number, minimum: 0 }
+                durationMinutes: { type: integer, minimum: 15, maximum: 480, multipleOf: 15 }
+                active: { type: boolean }
+      responses:
+        '200':
+          description: Updated service
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminService' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /api/v1/admin/scheduling/chairs:
+    post:
+      tags: [Scheduling]
+      summary: Create a clinic chair (manager only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, roomType, active]
+              properties:
+                name: { type: string, maxLength: 80 }
+                roomType: { type: string, enum: [EXAMINATION, XRAY, SURGERY, CONSULTATION] }
+                active: { type: boolean }
+      responses:
+        '201':
+          description: Created chair
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminChair' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/admin/scheduling/chairs/{id}:
+    put:
+      tags: [Scheduling]
+      summary: Update a chair; a chair with future appointments cannot be disabled (manager only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, roomType, active]
+              properties:
+                name: { type: string, maxLength: 80 }
+                roomType: { type: string, enum: [EXAMINATION, XRAY, SURGERY, CONSULTATION] }
+                active: { type: boolean }
+      responses:
+        '200':
+          description: Updated chair
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminChair' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/admin/scheduling/working-hours:
+    post:
+      tags: [Scheduling]
+      summary: Add a doctor's weekly working interval (manager only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [doctorId, dayOfWeek, startsAt, endsAt, effectiveFrom]
+              properties:
+                doctorId: { type: string, format: uuid }
+                dayOfWeek: { type: integer, minimum: 1, maximum: 7, description: ISO weekday, Monday is 1 }
+                startsAt: { type: string, format: time }
+                endsAt: { type: string, format: time }
+                effectiveFrom: { type: string, format: date }
+                effectiveUntil: { type: [string, 'null'], format: date }
+      responses:
+        '201':
+          description: Created working interval
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkingHour' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/admin/scheduling/working-hours/{id}:
+    delete:
+      tags: [Scheduling]
+      summary: Delete an interval if it does not invalidate future appointments (manager only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Deleted interval }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/admin/scheduling/doctor-leaves:
+    post:
+      tags: [Scheduling]
+      summary: Record a pending doctor's leave request (manager only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [doctorId, startsAt, endsAt]
+              properties:
+                doctorId: { type: string, format: uuid }
+                startsAt: { type: string, format: date-time }
+                endsAt: { type: string, format: date-time }
+                reason: { type: [string, 'null'], maxLength: 500 }
+      responses:
+        '201':
+          description: Pending leave request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DoctorLeave' }
+  /api/v1/admin/scheduling/doctor-leaves/{id}/review:
+    post:
+      tags: [Scheduling]
+      summary: Approve or reject leave; approval fails if appointments overlap (manager only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [APPROVE, REJECT] }
+                reason: { type: [string, 'null'], maxLength: 500 }
+      responses:
+        '200':
+          description: Reviewed leave request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DoctorLeave' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/admin/scheduling/clinic-closures:
+    post:
+      tags: [Scheduling]
+      summary: Add a clinic closure if no future appointment overlaps (manager only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [startsAt, endsAt, reason]
+              properties:
+                startsAt: { type: string, format: date-time }
+                endsAt: { type: string, format: date-time }
+                reason: { type: string, maxLength: 500 }
+      responses:
+        '201':
+          description: Created closure
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClinicClosure' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/admin/scheduling/clinic-closures/{id}:
+    delete:
+      tags: [Scheduling]
+      summary: Remove a clinic closure (manager only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Deleted closure }
+        '404': { $ref: '#/components/responses/Problem' }
+  /api/v1/availability:
+    get:
+      tags: [Scheduling]
+      summary: Find candidate 15 minute slots; booking revalidates in transaction
+      parameters:
+        - { name: doctorId, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: date, in: query, required: true, schema: { type: string, format: date } }
+        - { name: durationMinutes, in: query, required: true, schema: { type: integer, minimum: 15, maximum: 480 } }
+      responses:
+        '200':
+          description: Candidate slots and chairs
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/AvailabilitySlot' } }
+  /api/v1/appointments:
+    get:
+      tags: [Scheduling]
+      summary: List appointments in a bounded time range
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: doctorId, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Appointment list (max 31 days and 500 results)
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/AppointmentSummary' } }
+    post:
+      tags: [Scheduling]
+      summary: Book an appointment after transactional revalidation
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAppointment' }
+      responses:
+        '201':
+          description: Created or replayed booking
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppointmentSummary' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/appointments/patients/{patientId}/history:
+    get:
+      tags: [Scheduling]
+      summary: Read recent appointment history for a patient; doctors see only their own appointments
+      parameters:
+        - { name: patientId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 100 } }
+      responses:
+        '200':
+          description: Most recent appointments, newest first
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/AppointmentSummary' } }
+        '403': { $ref: '#/components/responses/Problem' }
+  /api/v1/appointments/{id}:
+    get:
+      tags: [Scheduling]
+      summary: Read one authorized appointment
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Appointment
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppointmentSummary' }
+        '403': { $ref: '#/components/responses/Problem' }
+  /api/v1/appointments/{id}/commands:
+    post:
+      tags: [Scheduling]
+      summary: Apply an allowed appointment state transition
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type: { type: string, enum: [CONFIRM, CHECK_IN, START, CANCEL, MARK_NO_SHOW] }
+                reason: { type: [string, 'null'], maxLength: 500 }
+      responses:
+        '200':
+          description: Updated appointment
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppointmentSummary' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/appointments/{id}/reschedule:
+    put:
+      tags: [Scheduling]
+      summary: Atomically move an eligible appointment
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scheduledAt, durationMinutes, chairId]
+              properties:
+                scheduledAt: { type: string, format: date-time }
+                durationMinutes: { type: integer, multipleOf: 15 }
+                chairId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Rescheduled appointment
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppointmentSummary' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/clinical/records/from-appointment:
+    post:
+      tags: [Clinical]
+      summary: Open the assigned doctor's draft record for an in-progress appointment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [appointmentId]
+              properties:
+                appointmentId: { type: string, format: uuid }
+                chiefComplaint: { type: [string, 'null'], maxLength: 4000 }
+      responses:
+        '201': { description: Draft clinical record }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/clinical/records/{id}:
+    get:
+      tags: [Clinical]
+      summary: Read record owned by the authenticated doctor
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Clinical record }
+        '403': { $ref: '#/components/responses/Problem' }
+    put:
+      tags: [Clinical]
+      summary: Save a draft using optimistic version
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                chiefComplaint: { type: [string, 'null'], maxLength: 4000 }
+                medicalHistory: { type: [string, 'null'], maxLength: 10000 }
+                examinationNotes: { type: [string, 'null'], maxLength: 10000 }
+                diagnosis: { type: [string, 'null'], maxLength: 5000 }
+                treatmentNotes: { type: [string, 'null'], maxLength: 10000 }
+                followUpAt: { type: [string, 'null'], format: date-time }
+                version: { type: integer, minimum: 0 }
+      responses:
+        '200': { description: Saved draft }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/clinical/records/{id}/workspace:
+    get:
+      tags: [Clinical]
+      summary: Read a doctor's authorized record with teeth, procedures, and issued prescriptions
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Clinical workspace data }
+        '403': { $ref: '#/components/responses/Problem' }
+  /api/v1/clinical/records/{id}/teeth:
+    post:
+      tags: [Clinical]
+      summary: Record FDI tooth findings on a draft
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [toothNumber, conditionCode]
+              properties:
+                toothNumber: { type: integer, minimum: 11, maximum: 85 }
+                conditionCode: { type: string, maxLength: 40 }
+                surfaces: { type: array, items: { type: string, enum: [MESIAL, DISTAL, OCCLUSAL, INCISAL, BUCCAL, LINGUAL, PALATAL] } }
+                notes: { type: [string, 'null'], maxLength: 1000 }
+      responses:
+        '201': { description: Tooth finding }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/clinical/records/{id}/procedures:
+    post:
+      tags: [Clinical]
+      summary: Add an actually performed procedure with immutable service snapshot
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [serviceId]
+              properties:
+                serviceId: { type: string, format: uuid }
+                toothNumbers: { type: array, items: { type: integer } }
+                quantity: { type: number, exclusiveMinimum: 0 }
+                discountAmount: { type: number, minimum: 0 }
+                notes: { type: [string, 'null'], maxLength: 2000 }
+      responses:
+        '201': { description: Recorded procedure }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/clinical/patients/{patientId}/records:
+    get:
+      tags: [Clinical]
+      summary: List the doctor's own records or the patient's signed, published records
+      parameters:
+        - { name: patientId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Authorized clinical history }
+        '403': { $ref: '#/components/responses/Problem' }
+  /api/v1/clinical/patients/{patientId}/treatment-plans:
+    get:
+      tags: [Clinical]
+      summary: List approved treatment plans for the authenticated linked patient
+      parameters:
+        - { name: patientId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Approved plans with immutable service and price snapshots }
+        '403': { $ref: '#/components/responses/Problem' }
+  /api/v1/clinical/records/{id}/sign:
+    post:
+      tags: [Clinical]
+      summary: Sign and finalize a draft; publishes ClinicalRecordSigned.v1
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: version, in: query, required: true, schema: { type: integer, minimum: 0 } }
+      responses:
+        '200': { description: Signed record }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/clinical/records/{id}/prescriptions:
+    post:
+      tags: [Clinical]
+      summary: Issue an immutable prescription on a signed record
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                notes: { type: [string, 'null'], maxLength: 2000 }
+                items: { type: array, minItems: 1, items: { type: object } }
+      responses:
+        '201': { description: Issued prescription }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/clinical/records/{id}/files:
+    get:
+      tags: [Clinical]
+      summary: List files for a doctor's record or the patient's signed record
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Authorized file metadata; object keys are never returned }
+        '403': { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [Clinical]
+      summary: Upload a private PDF or image for a record (doctor owner only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, fileKind]
+              properties:
+                file: { type: string, format: binary }
+                fileKind: { type: string, pattern: '^[A-Z_]{2,32}$' }
+      responses:
+        '201': { description: Private file metadata }
+        '400': { $ref: '#/components/responses/Problem' }
+  /api/v1/clinical/files/{fileId}/content:
+    get:
+      tags: [Clinical]
+      summary: Stream a private file after doctor-owner or patient-record authorization
+      parameters:
+        - { name: fileId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Private file bytes with attachment disposition }
+        '404': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+  /api/v1/clinical/records/{id}/treatment-plan:
+    post:
+      tags: [Clinical]
+      summary: Create or retrieve the draft treatment plan for a doctor's record
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties: { title: { type: string, minLength: 1, maxLength: 300 } }
+      responses:
+        '201': { description: Draft treatment plan }
+        '404': { $ref: '#/components/responses/Problem' }
+  /api/v1/clinical/treatment-plans/{planId}:
+    get:
+      tags: [Clinical]
+      summary: Read a treatment plan owned by the authenticated doctor
+      parameters:
+        - { name: planId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Treatment plan and ordered service snapshots }
+        '404': { $ref: '#/components/responses/Problem' }
+  /api/v1/clinical/treatment-plans/{planId}/items:
+    post:
+      tags: [Clinical]
+      summary: Add a service snapshot to a draft treatment plan
+      parameters:
+        - { name: planId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [serviceId]
+              properties:
+                serviceId: { type: string, format: uuid }
+                quantity: { type: number, exclusiveMinimum: 0 }
+                notes: { type: [string, 'null'], maxLength: 2000 }
+      responses:
+        '201': { description: Ordered treatment item snapshot }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/v1/clinical/treatment-plans/{planId}/approve:
+    post:
+      tags: [Clinical]
+      summary: Approve and freeze a non-empty plan based on a signed record
+      parameters:
+        - { name: planId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: version, in: query, required: true, schema: { type: integer, minimum: 0 } }
+      responses:
+        '200': { description: Approved immutable plan }
+        '409': { $ref: '#/components/responses/Problem' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 8, maxLength: 128 }
+  responses:
+    Problem:
+      description: RFC 9457 Problem Details with stable clinic error code
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+  schemas:
+    TokenResponse:
+      type: object
+      required: [accessToken, refreshToken, expiresIn, userId, fullName, roles]
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        expiresIn: { type: integer }
+        userId: { type: string, format: uuid }
+        fullName: { type: string }
+        roles: { type: array, items: { type: string } }
+    Problem:
+      type: object
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        errorCode: { type: string }
+        traceId: { type: string }
+        fieldErrors: { type: object, additionalProperties: { type: string } }
+    CreatePatient:
+      type: object
+      required: [fullName, phone]
+      properties:
+        fullName: { type: string, minLength: 1, maxLength: 200 }
+        phone: { type: string, minLength: 1, maxLength: 32 }
+        email: { type: [string, 'null'], format: email }
+        gender: { type: [string, 'null'], enum: [MALE, FEMALE, OTHER, null] }
+        dateOfBirth: { type: [string, 'null'], format: date }
+        address: { type: [string, 'null'], maxLength: 500 }
+        emergencyContact: { type: [string, 'null'], maxLength: 500 }
+        emergencyPhone: { type: [string, 'null'], maxLength: 32 }
+        allergies: { type: [string, 'null'], maxLength: 1000 }
+        medicalHistory: { type: [string, 'null'], maxLength: 4000 }
+    CreateAppointment:
+      type: object
+      required: [patientId, doctorId, chairId, serviceId, scheduledAt, durationMinutes]
+      properties:
+        patientId: { type: string, format: uuid }
+        doctorId: { type: string, format: uuid }
+        chairId: { type: string, format: uuid }
+        serviceId: { type: string, format: uuid }
+        scheduledAt: { type: string, format: date-time }
+        durationMinutes: { type: integer, minimum: 15, maximum: 480, multipleOf: 15 }
+        reason: { type: [string, 'null'], maxLength: 1000 }
+        patientNote: { type: [string, 'null'], maxLength: 1000 }
+    PatientSummary:
+      type: object
+      required: [id, patientCode, fullName, phone, email, dateOfBirth, gender, address, emergencyContact, emergencyPhone, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        patientCode: { type: string }
+        fullName: { type: string }
+        phone: { type: string }
+        email: { type: [string, 'null'], format: email }
+        dateOfBirth: { type: [string, 'null'], format: date }
+        gender: { type: [string, 'null'], enum: [MALE, FEMALE, OTHER, null] }
+        address: { type: [string, 'null'] }
+        emergencyContact: { type: [string, 'null'] }
+        emergencyPhone: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+    PatientPage:
+      type: object
+      required: [items, page, size, hasNext]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/PatientSummary' } }
+        page: { type: integer }
+        size: { type: integer }
+        hasNext: { type: boolean }
+    AccountLink:
+      type: object
+      required: [linked, userId]
+      properties:
+        linked: { type: boolean }
+        userId: { type: [string, 'null'], format: uuid }
+    UserAccount:
+      type: object
+      required: [id, email, fullName, status, roles, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        fullName: { type: string }
+        status: { type: string, enum: [ACTIVE, SUSPENDED, DISABLED] }
+        roles: { type: array, items: { type: string, enum: [SUPER_ADMIN, CLINIC_MANAGER, DOCTOR, RECEPTIONIST, ASSISTANT, PATIENT] } }
+        createdAt: { type: string, format: date-time }
+    ServiceSummary:
+      type: object
+      required: [id, code, name, price, durationMinutes]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        price: { type: number, minimum: 0 }
+        durationMinutes: { type: integer, minimum: 15, maximum: 480 }
+    DoctorSummary:
+      type: object
+      required: [id, name, specialty]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        specialty: { type: [string, 'null'] }
+    ChairSummary:
+      type: object
+      required: [id, name, roomType]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        roomType: { type: string, enum: [EXAMINATION, XRAY, SURGERY, CONSULTATION] }
+    AppointmentSummary:
+      type: object
+      required: [id, appointmentNumber, patientId, doctorId, chairId, scheduledAt, durationMinutes, status, source, serviceName, estimatedPrice, version]
+      properties:
+        id: { type: string, format: uuid }
+        appointmentNumber: { type: string }
+        patientId: { type: string, format: uuid }
+        doctorId: { type: string, format: uuid }
+        chairId: { type: string, format: uuid }
+        scheduledAt: { type: string, format: date-time }
+        durationMinutes: { type: integer }
+        status: { type: string, enum: [BOOKED, CONFIRMED, ARRIVED, IN_PROGRESS, COMPLETED, CANCELLED, NO_SHOW] }
+        source: { type: string }
+        serviceName: { type: string }
+        estimatedPrice: { type: number }
+        version: { type: integer, minimum: 0 }
+    AvailabilitySlot:
+      type: object
+      required: [startsAt, availableChairs]
+      properties:
+        startsAt: { type: string, format: date-time }
+        availableChairs: { type: array, items: { type: string, format: uuid } }
+    AdminService:
+      allOf:
+        - $ref: '#/components/schemas/ServiceSummary'
+        - type: object
+          required: [description, active]
+          properties:
+            description: { type: [string, 'null'] }
+            active: { type: boolean }
+    AdminDoctor:
+      allOf:
+        - $ref: '#/components/schemas/DoctorSummary'
+        - type: object
+          required: [bookable]
+          properties:
+            bookable: { type: boolean }
+    AdminChair:
+      allOf:
+        - $ref: '#/components/schemas/ChairSummary'
+        - type: object
+          required: [active]
+          properties:
+            active: { type: boolean }
+    WorkingHour:
+      type: object
+      required: [id, doctorId, doctorName, dayOfWeek, startsAt, endsAt, effectiveFrom, effectiveUntil]
+      properties:
+        id: { type: string, format: uuid }
+        doctorId: { type: string, format: uuid }
+        doctorName: { type: string }
+        dayOfWeek: { type: integer, minimum: 1, maximum: 7 }
+        startsAt: { type: string, format: time }
+        endsAt: { type: string, format: time }
+        effectiveFrom: { type: string, format: date }
+        effectiveUntil: { type: [string, 'null'], format: date }
+    DoctorLeave:
+      type: object
+      required: [id, doctorId, doctorName, startsAt, endsAt, status, reason]
+      properties:
+        id: { type: string, format: uuid }
+        doctorId: { type: string, format: uuid }
+        doctorName: { type: string }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        status: { type: string, enum: [PENDING, APPROVED, REJECTED, CANCELLED] }
+        reason: { type: [string, 'null'] }
+    ClinicClosure:
+      type: object
+      required: [id, startsAt, endsAt, reason]
+      properties:
+        id: { type: string, format: uuid }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        reason: { type: string }
+    SchedulingCatalog:
+      type: object
+      required: [services, doctors, chairs, workingHours, doctorLeaves, clinicClosures]
+      properties:
+        services: { type: array, items: { $ref: '#/components/schemas/AdminService' } }
+        doctors: { type: array, items: { $ref: '#/components/schemas/AdminDoctor' } }
+        chairs: { type: array, items: { $ref: '#/components/schemas/AdminChair' } }
+        workingHours: { type: array, items: { $ref: '#/components/schemas/WorkingHour' } }
+        doctorLeaves: { type: array, items: { $ref: '#/components/schemas/DoctorLeave' } }
+        clinicClosures: { type: array, items: { $ref: '#/components/schemas/ClinicClosure' } }

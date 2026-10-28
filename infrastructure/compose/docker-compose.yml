@@ -1,0 +1,297 @@
+name: ${COMPOSE_PROJECT_NAME:-phongkham}
+services:
+  postgres:
+    image: postgres:18.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Run scripts/bootstrap.ps1 first}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/bootstrap.ps1 first}
+      POSTGRES_DB: postgres
+      IDENTITY_DB_USER: ${IDENTITY_DB_USER}
+      IDENTITY_DB_PASSWORD: ${IDENTITY_DB_PASSWORD}
+      PATIENT_DB_USER: ${PATIENT_DB_USER}
+      PATIENT_DB_PASSWORD: ${PATIENT_DB_PASSWORD}
+      SCHEDULING_DB_USER: ${SCHEDULING_DB_USER}
+      SCHEDULING_DB_PASSWORD: ${SCHEDULING_DB_PASSWORD}
+      CLINICAL_DB_USER: ${CLINICAL_DB_USER}
+      CLINICAL_DB_PASSWORD: ${CLINICAL_DB_PASSWORD}
+      NOTIFICATION_DB_USER: ${NOTIFICATION_DB_USER}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
+    ports: ["5432:5432"]
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      - ../postgres/init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:4.2.9-management
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: clinic
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Run scripts/bootstrap.ps1 first}
+    ports: ["${RABBITMQ_HOST_PORT:-5673}:5672", "${RABBITMQ_MANAGEMENT_HOST_PORT:-15673}:15672"]
+    volumes: ["rabbitmq-data:/var/lib/rabbitmq"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:8.2.10-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?Run scripts/bootstrap.ps1 first}"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    ports: ["${REDIS_HOST_PORT:-6380}:6379"]
+    volumes: ["redis-data:/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$${REDIS_PASSWORD}\" redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: cgr.dev/chainguard/minio@sha256:87896cb33f93ecfcca4e883c3fb2f86a0a1a600c003a104011ed30631c1869c3
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Run scripts/bootstrap.ps1 first}
+    ports: ["9000:9000", "9001:9001"]
+    volumes: ["minio-data:/data"]
+
+  minio-init:
+    image: phongkham/minio-tools:0.1.0
+    build:
+      context: .
+      dockerfile: minio-tools.Dockerfile
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do sleep 2; done;
+        mc mb --ignore-existing local/clinical-files;
+        mc anonymous set none local/clinical-files
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    restart: "no"
+
+  minio-client:
+    image: phongkham/minio-tools:0.1.0
+    build:
+      context: .
+      dockerfile: minio-tools.Dockerfile
+    profiles: ["tools"]
+    depends_on:
+      minio:
+        condition: service_started
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+
+  mailpit:
+    image: axllent/mailpit:v1.31.6
+    restart: unless-stopped
+    ports: ["1025:1025", "8025:8025"]
+    volumes: ["mailpit-data:/data"]
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_MAX_MESSAGES: 5000
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  identity-service:
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+      args: { APP_MODULE: backend/identity-service, APP_JAR: identity-service-0.1.0-SNAPSHOT }
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_URL: jdbc:postgresql://postgres:5432/identity_db
+      DB_USER: ${IDENTITY_DB_USER}
+      DB_PASSWORD: ${IDENTITY_DB_PASSWORD}
+      IDENTITY_JWT_PRIVATE_KEY: ${IDENTITY_JWT_PRIVATE_KEY}
+      IDENTITY_JWT_PUBLIC_KEY: ${IDENTITY_JWT_PUBLIC_KEY}
+      DEMO_LOGIN_PASSWORD: ${DEMO_LOGIN_PASSWORD}
+      JWT_ISSUER: http://identity-service:8081
+      JWT_AUDIENCE: clinic-api
+      SERVER_PORT: 8081
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck: { test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8081/actuator/health/readiness || exit 1"], interval: 10s, timeout: 5s, retries: 20, start_period: 60s }
+
+  patient-service:
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+      args: { APP_MODULE: backend/patient-service, APP_JAR: patient-service-0.1.0-SNAPSHOT }
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_URL: jdbc:postgresql://postgres:5432/patient_db
+      DB_USER: ${PATIENT_DB_USER}
+      DB_PASSWORD: ${PATIENT_DB_PASSWORD}
+      JWT_ISSUER: http://identity-service:8081
+      JWT_JWKS_URI: http://identity-service:8081/.well-known/jwks.json
+      JWT_AUDIENCE: clinic-api
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: clinic
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      APP_IDENTITY_SERVICE_URL: http://identity-service:8081
+      DEMO_LOGIN_PASSWORD: ${DEMO_LOGIN_PASSWORD}
+      SERVER_PORT: 8082
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      identity-service: { condition: service_healthy }
+    healthcheck: { test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8082/actuator/health/readiness || exit 1"], interval: 10s, timeout: 5s, retries: 20, start_period: 60s }
+
+  scheduling-service:
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+      args: { APP_MODULE: backend/scheduling-service, APP_JAR: scheduling-service-0.1.0-SNAPSHOT }
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_URL: jdbc:postgresql://postgres:5432/scheduling_db
+      DB_USER: ${SCHEDULING_DB_USER}
+      DB_PASSWORD: ${SCHEDULING_DB_PASSWORD}
+      JWT_ISSUER: http://identity-service:8081
+      JWT_JWKS_URI: http://identity-service:8081/.well-known/jwks.json
+      JWT_AUDIENCE: clinic-api
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: clinic
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      PATIENT_BASE_URL: http://patient-service:8082
+      CLINIC_TIMEZONE: Asia/Ho_Chi_Minh
+      SERVER_PORT: 8083
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      patient-service: { condition: service_healthy }
+    healthcheck: { test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8083/actuator/health/readiness || exit 1"], interval: 10s, timeout: 5s, retries: 20, start_period: 60s }
+
+  clinical-service:
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+      args: { APP_MODULE: backend/clinical-service, APP_JAR: clinical-service-0.1.0-SNAPSHOT }
+    restart: unless-stopped
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/clinical_db
+      DB_USER: ${CLINICAL_DB_USER}
+      DB_PASSWORD: ${CLINICAL_DB_PASSWORD}
+      JWT_ISSUER: http://identity-service:8081
+      JWT_JWKS_URI: http://identity-service:8081/.well-known/jwks.json
+      JWT_AUDIENCE: clinic-api
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: clinic
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      SCHEDULING_BASE_URL: http://scheduling-service:8083
+      PATIENT_BASE_URL: http://patient-service:8082
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: clinical-files
+      SERVER_PORT: 8084
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      scheduling-service: { condition: service_healthy }
+      patient-service: { condition: service_healthy }
+      minio-init: { condition: service_completed_successfully }
+    healthcheck: { test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8084/actuator/health/readiness || exit 1"], interval: 10s, timeout: 5s, retries: 20, start_period: 60s }
+
+  notification-service:
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+      args: { APP_MODULE: backend/notification-service, APP_JAR: notification-service-0.1.0-SNAPSHOT }
+    restart: unless-stopped
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/notification_db
+      DB_USER: ${NOTIFICATION_DB_USER}
+      DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
+      JWT_ISSUER: http://identity-service:8081
+      JWT_JWKS_URI: http://identity-service:8081/.well-known/jwks.json
+      JWT_AUDIENCE: clinic-api
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: clinic
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SERVER_PORT: 8085
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      mailpit: { condition: service_healthy }
+    healthcheck: { test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8085/actuator/health/readiness || exit 1"], interval: 10s, timeout: 5s, retries: 20, start_period: 60s }
+
+  api-gateway:
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+      args: { APP_MODULE: backend/api-gateway, APP_JAR: api-gateway-0.1.0-SNAPSHOT }
+    restart: unless-stopped
+    environment:
+      JWT_ISSUER: http://identity-service:8081
+      JWT_JWKS_URI: http://identity-service:8081/.well-known/jwks.json
+      JWT_AUDIENCE: clinic-api
+      IDENTITY_BASE_URL: http://identity-service:8081
+      PATIENT_BASE_URL: http://patient-service:8082
+      SCHEDULING_BASE_URL: http://scheduling-service:8083
+      CLINICAL_BASE_URL: http://clinical-service:8084
+      NOTIFICATION_BASE_URL: http://notification-service:8085
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      SERVER_PORT: 8080
+    ports: ["${GATEWAY_HOST_PORT:-8081}:8080"]
+    depends_on:
+      identity-service: { condition: service_healthy }
+      patient-service: { condition: service_healthy }
+      scheduling-service: { condition: service_healthy }
+      clinical-service: { condition: service_healthy }
+      notification-service: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck: { test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/actuator/health/readiness || exit 1"], interval: 10s, timeout: 5s, retries: 20, start_period: 60s }
+
+  web:
+    build:
+      context: ../..
+      dockerfile: frontend/web/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      GATEWAY_URL: http://api-gateway:8080
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DB: 1
+      SESSION_COOKIE_NAME: antam_session
+    ports: ["3000:3000"]
+    depends_on:
+      api-gateway: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck: { test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"], interval: 10s, timeout: 5s, retries: 20, start_period: 60s }
+
+volumes:
+  postgres-data:
+  rabbitmq-data:
+  redis-data:
+  minio-data:
+  mailpit-data:
+

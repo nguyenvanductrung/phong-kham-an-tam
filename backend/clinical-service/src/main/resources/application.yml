@@ -1,0 +1,45 @@
+server.port: ${SERVER_PORT:8084}
+spring:
+  application.name: clinical-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/clinical_db}
+    username: ${DB_USER:clinical_app}
+    password: ${DB_PASSWORD:clinical_local}
+  flyway.locations: classpath:db/migration
+  jackson.time-zone: UTC
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:clinic}
+    password: ${RABBITMQ_PASSWORD:clinic_local}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    listener.simple.retry.enabled: true
+    listener.simple.retry.max-attempts: 5
+    listener.simple.retry.initial-interval: 1s
+    listener.simple.retry.multiplier: 2
+    listener.simple.retry.max-interval: 10s
+    listener.simple.default-requeue-rejected: false
+management:
+  endpoints.web.exposure.include: health,info,prometheus
+  endpoint.health.probes.enabled: true
+security:
+  resource-server.enabled: true
+  issuer: ${JWT_ISSUER:http://identity-service:8081}
+  audience: ${JWT_AUDIENCE:clinic-api}
+  jwks-uri: ${JWT_JWKS_URI:http://identity-service:8081/.well-known/jwks.json}
+app:
+  scheduling-service-url: ${SCHEDULING_BASE_URL:http://localhost:8083}
+  patient-service-url: ${PATIENT_BASE_URL:http://localhost:8082}
+  files:
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ACCESS_KEY:clinic_minio}
+    secret-key: ${MINIO_SECRET_KEY:clinic_local}
+    bucket: ${MINIO_BUCKET:clinical-files}
+    max-bytes: ${CLINICAL_FILE_MAX_BYTES:20971520}
+spring.servlet.multipart.max-file-size: 20MB
+spring.servlet.multipart.max-request-size: 21MB
+events:
+  enabled: true
+  outbox.enabled: true
+  consumer.enabled: true
