@@ -11,4 +11,7 @@ playwright-report/
 test-results/
 data/
 *.log
+.idea/
+*.iml
+.vscode/
 
