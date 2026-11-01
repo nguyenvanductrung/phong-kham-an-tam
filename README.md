@@ -1,50 +1,55 @@
 # Nha Khoa An Tâm
 
-Base project quản lý lịch khám và bệnh án điện tử cho một phòng khám nha khoa. Giao diện tiếng Việt; API và mã nguồn tiếng Anh. Thời gian lưu UTC, lịch làm việc theo `Asia/Ho_Chi_Minh`, tiền VND.
+Nha Khoa An Tâm là ứng dụng quản lý vận hành cho một phòng khám nha khoa. Sản phẩm tập trung vào các luồng chính từ tiếp nhận bệnh nhân và đặt lịch đến khám, lưu bệnh án và theo dõi kế hoạch điều trị. Giao diện và dữ liệu demo dùng tiếng Việt; thời gian lưu theo UTC, lịch làm việc theo múi giờ `Asia/Ho_Chi_Minh`, tiền tệ VND.
 
-## Chạy bản demo local
+## Tính năng
 
-Yêu cầu Docker Desktop chạy Linux containers. Lần đầu trên Windows chạy:
+- **Tài khoản và phân quyền:** đăng nhập theo vai trò lễ tân, bác sĩ, bệnh nhân và quản lý; phiên trình duyệt dùng cookie HttpOnly.
+- **Hồ sơ bệnh nhân:** tạo, tìm kiếm và xem hồ sơ hành chính; liên kết tài khoản bệnh nhân với hồ sơ do nhân viên thực hiện.
+- **Lịch hẹn:** xem lịch ngày/tuần; đặt, đổi, hủy, xác nhận và tiếp đón lịch. Hệ thống kiểm tra trùng bác sĩ/ghế và thời gian phục vụ.
+- **Danh mục và lịch làm việc:** quản lý dịch vụ, ghế, ca bác sĩ, yêu cầu nghỉ và lịch đóng cửa; thay đổi cấu hình được kiểm tra với lịch đã đặt.
+- **Khám và bệnh án:** bác sĩ phụ trách có thể mở lượt khám, lưu bản nháp, ghi nhận tình trạng răng và thủ thuật, rồi chốt bệnh án. Nội dung bệnh án đã chốt được bảo vệ khỏi chỉnh sửa trực tiếp.
+- **Kế hoạch điều trị và đơn thuốc:** tạo kế hoạch với snapshot dịch vụ/giá, phê duyệt kế hoạch sau khi chốt bệnh án và phát hành đơn thuốc.
+- **Tệp lâm sàng:** tải lên và xem tệp PDF/JPEG/PNG/WebP trong bucket riêng tư, có kiểm tra quyền truy cập và giới hạn kích thước.
+- **Cổng bệnh nhân và email demo:** bệnh nhân xem lịch sử đã chốt, lịch hẹn và kế hoạch được phê duyệt; email demo có thể xem trong Mailpit.
 
-```powershell
-Copy-Item .env.example .env
-./scripts/bootstrap.ps1
-docker --context default compose --env-file .env -f infrastructure/compose/docker-compose.yml up --build --wait --wait-timeout 300 -d
-```
+## Công nghệ
 
-Chờ các healthcheck xanh, sau đó mở `http://localhost:3000`. Gateway: `http://localhost:8081`; RabbitMQ: `http://localhost:15673`; Mailpit: `http://localhost:8025`; MinIO Console: `http://localhost:9001`. RabbitMQ dùng AMQP cổng `5673`, Redis cổng `6380`. Các cổng host có thể đổi qua biến `RABBITMQ_HOST_PORT`, `RABBITMQ_MANAGEMENT_HOST_PORT`, `REDIS_HOST_PORT` và `GATEWAY_HOST_PORT`. Hợp đồng API được duy trì tại [`contracts/openapi/clinic-api.yaml`](contracts/openapi/clinic-api.yaml).
+| Lớp | Công nghệ |
+|---|---|
+| Web | Next.js 16, React 19, TypeScript, Tailwind CSS |
+| Backend và API | Java 21, Spring Boot 4, Spring Cloud Gateway; REST API theo OpenAPI |
+| Cơ sở dữ liệu | PostgreSQL, mỗi service sở hữu database và Flyway migration riêng |
+| Phiên đăng nhập | Redis lưu session phía server; cookie trình duyệt là HttpOnly |
+| Tác vụ nền | RabbitMQ, transactional outbox/inbox và worker gửi email |
+| Tệp lâm sàng | MinIO với giao thức tương thích S3 và bucket private |
+| Môi trường local | Docker Compose; Mailpit nhận email demo |
 
-Tài khoản demo tạo bởi seed dev: lễ tân `receptionist@antam.local`, bác sĩ `doctor@antam.local`, bệnh nhân `patient@antam.local`, quản lý `manager@antam.local`. Mật khẩu được sinh vào `.env` khi chạy bootstrap và in một lần trong terminal. Không dùng tài khoản demo trong môi trường thật.
+## Các thành phần
 
-## Luồng demo
+- `frontend/web`: giao diện web và Backend-for-Frontend (BFF).
+- `backend/identity-service`: tài khoản, xác thực, phiên đăng nhập và phân quyền.
+- `backend/patient-service`: hồ sơ hành chính bệnh nhân.
+- `backend/scheduling-service`: lịch hẹn, danh mục và cấu hình ca làm.
+- `backend/clinical-service`: bệnh án, thủ thuật, đơn thuốc, kế hoạch điều trị và tệp.
+- `backend/notification-service`: thông báo và hàng đợi email.
+- `backend/api-gateway`: cổng API, xác thực token, giới hạn tốc độ và định tuyến.
+- `backend/common-lib`: cấu hình và thành phần dùng chung.
 
-1. Đăng nhập vai lễ tân, tạo hồ sơ bệnh nhân và đặt lịch theo thời lượng dịch vụ trên các mốc 15 phút.
-2. Xác nhận và tiếp đón; đổi lịch hoặc thử cùng lúc đặt cùng ghế/bác sĩ để thấy mã lỗi `APPOINTMENT_CONFLICT`.
-3. Quản lý phòng khám dùng trang **Danh mục** để chỉnh dịch vụ/giá, ghế, ca bác sĩ, ghi nhận nghỉ và lịch đóng cửa; lịch hẹn đang có sẽ được bảo vệ khi thay đổi cấu hình.
-4. Đăng nhập bác sĩ, mở lượt khám, lưu bản nháp, thêm thủ thuật, đính kèm ảnh/PDF riêng tư và chốt bệnh án.
-5. Lập kế hoạch điều trị theo snapshot giá dịch vụ, duyệt kế hoạch sau khi chốt; phát hành đơn thuốc, xem lịch sử và email trong Mailpit.
+Mỗi service sở hữu dữ liệu riêng; các luồng liên service dùng API và sự kiện thay vì khóa ngoại chéo database. Xem [tổng quan kiến trúc](docs/architecture/overview.md), [quyền truy cập](docs/architecture/authorization.md) và [sơ đồ dữ liệu](docs/database/erd.md).
 
-Các trang chỉ hiển thị dữ liệu nhận từ API thật. Khi dịch vụ chưa sẵn sàng, UI hiển thị trạng thái lỗi và nút thử lại.
+## Bắt đầu
 
-## Build và kiểm chứng
+Hướng dẫn cài đặt, khởi động lần đầu, chạy lại, kiểm tra và dừng ứng dụng nằm tại **[docs/huong-dan-chay.md](docs/huong-dan-chay.md)**.
 
-```powershell
-./mvnw.cmd -B verify
-corepack pnpm --dir frontend/web api:generate
-corepack pnpm --dir frontend/web lint
-corepack pnpm --dir frontend/web typecheck
-corepack pnpm --dir frontend/web build
-corepack pnpm --dir frontend/web exec playwright install chromium
-corepack pnpm --dir frontend/web exec playwright test
-```
+Ứng dụng local sau khi khởi động:
 
-`api:generate` sinh `frontend/web/src/lib/api.generated.ts` từ OpenAPI. Frontend dùng kiểu contract cho các luồng bệnh nhân, đặt lịch và danh mục; CI kiểm tra file sinh ra khớp với contract đã commit.
+- Web: <http://localhost:3000>
+- API gateway: <http://localhost:8081>
+- Mailpit: <http://localhost:8025>
 
-Integration tests cần Docker/Testcontainers. Không báo pass cho lệnh chưa chạy thành công. Seed chỉ chạy với profile `dev` và dùng dữ liệu tổng hợp.
+## Phạm vi và giới hạn
 
-## Dữ liệu và vận hành
+Đây là MVP demo cho một cơ sở, dùng dữ liệu tổng hợp. Chưa bao gồm thanh toán/hóa đơn, kho vật tư, CRM, labo, chấm công, KPI, SMS/Zalo và nhiều cơ sở. Một số luồng lâm sàng và ma trận quyền vẫn cần được kiểm thử E2E đầy đủ. Xem [giới hạn và roadmap](docs/roadmap/limits.md).
 
-Mỗi service sở hữu DB, user DB và Flyway riêng. Không có FK/JOIN giữa database. Dùng `scripts/backup.ps1` và `scripts/restore.ps1` để sao lưu/khôi phục các database và object storage. Cấu hình chạy qua biến môi trường; `.env` không được commit.
-
-Xem [architecture overview](docs/architecture/overview.md), [appointment state machine](docs/architecture/appointment-state-machine.md), [database ownership](docs/database/ownership.md), [runbook](docs/runbooks/local-development.md) và [known limits](docs/roadmap/limits.md).
-
+Không nhập dữ liệu bệnh nhân thật vào môi trường demo. Cấu hình local và mật khẩu nằm trong `.env`; giữ file này riêng tư, không commit.
