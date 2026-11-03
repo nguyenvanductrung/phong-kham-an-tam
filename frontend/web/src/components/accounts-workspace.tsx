@@ -8,6 +8,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { useApi } from "@/components/use-api";
 import { useSession } from "@/components/session-context";
+import { useDebouncedValue } from "@/components/use-debounced-value";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -27,8 +28,8 @@ type Values = z.infer<typeof schema>;
 export function AccountsWorkspace() {
   const api = useApi(); const cache = useQueryClient(); const session = useSession();
   const canSuperAdmin = session.roles.includes("SUPER_ADMIN");
-  const [search, setSearch] = useState(""); const [createOpen, setCreateOpen] = useState(false); const [notice, setNotice] = useState(""); const [error, setError] = useState("");
-  const accounts = useQuery({ queryKey: ["accounts", search], queryFn: () => api.operation("/api/v1/admin/users", "get", { query: { q: search } }) });
+  const [search, setSearch] = useState(""); const debouncedSearch = useDebouncedValue(search); const [createOpen, setCreateOpen] = useState(false); const [notice, setNotice] = useState(""); const [error, setError] = useState("");
+  const accounts = useQuery({ queryKey: ["accounts", debouncedSearch], queryFn: ({ signal }) => api.operation("/api/v1/admin/users", "get", { query: { q: debouncedSearch }, signal }) });
   const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: { fullName: "", email: "", password: "", roles: ["RECEPTIONIST"] } });
   const refresh = () => cache.invalidateQueries({ queryKey: ["accounts"] });
   const create = useMutation({ mutationFn: (values: Values) => api.operation("/api/v1/admin/users", "post", { body: values }), onSuccess: async (account) => { setCreateOpen(false); form.reset({ fullName: "", email: "", password: "", roles: ["RECEPTIONIST"] }); setNotice(`Đã tạo tài khoản ${account.email}.`); setError(""); await refresh(); }, onError: showError });

@@ -20,7 +20,7 @@ public class JdbcPatientDao implements PatientDao {
 
     @Override public List<PatientModels.PatientSummary> search(String query,String status,int limit,long offset) {
         return jdbc.query("""
-                SELECT * FROM patients
+                SELECT id,patient_code,full_name,phone,email,date_of_birth,gender,address,emergency_contact,emergency_phone,created_at,deleted_at FROM patients
                 WHERE (?='ALL' OR (?='ACTIVE' AND deleted_at IS NULL) OR (?='ARCHIVED' AND deleted_at IS NOT NULL))
                   AND (?='' OR full_name ILIKE ? OR phone LIKE ? OR patient_code ILIKE ?)
                 ORDER BY full_name,id LIMIT ? OFFSET ?
