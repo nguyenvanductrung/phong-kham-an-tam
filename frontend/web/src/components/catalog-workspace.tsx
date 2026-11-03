@@ -33,7 +33,7 @@ export function CatalogWorkspace() {
   const [hourForm, setHourForm] = useState({ doctorId: "", dayOfWeek: "1", startsAt: "08:00", endsAt: "17:00", effectiveFrom: clinicToday(), effectiveUntil: "" });
   const [leaveForm, setLeaveForm] = useState({ doctorId: "", startsAt: "", endsAt: "", reason: "" });
   const [closureForm, setClosureForm] = useState({ startsAt: "", endsAt: "", reason: "" });
-  const snapshot = useQuery({ queryKey: ["admin-scheduling-catalog"], queryFn: () => api.operation("/api/v1/admin/scheduling/catalog", "get", {}) });
+  const snapshot = useQuery({ queryKey: ["admin-scheduling-catalog"], queryFn: ({ signal }) => api.operation("/api/v1/admin/scheduling/catalog", "get", { signal }), staleTime: 60_000 });
   const data = snapshot.data;
   const refresh = async () => { await cache.invalidateQueries({ queryKey: ["admin-scheduling-catalog"] }); await cache.invalidateQueries({ queryKey: ["catalog"] }); await cache.invalidateQueries({ queryKey: ["availability"] }); };
   const handleError = (cause: unknown) => { setMessage(""); setError(cause instanceof ApiError ? cause.message : cause instanceof Error ? cause.message : "Không thể lưu thay đổi."); };

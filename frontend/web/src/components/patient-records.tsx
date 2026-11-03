@@ -13,9 +13,9 @@ type PublishedRecord = { record: { id: string; recordNumber: string; visitAt: st
 
 export function PatientRecords() {
   const api = useApi();
-  const patient = useQuery({ queryKey: ["patient", "me"], queryFn: () => api<Patient>("/api/v1/patients/me") });
-  const records = useQuery({ queryKey: ["patient-records", patient.data?.id], queryFn: () => api<PublishedRecord[]>(`/api/v1/clinical/patients/${patient.data?.id}/records`), enabled: !!patient.data?.id });
-  const plans = useQuery({ queryKey: ["patient-treatment-plans", patient.data?.id], queryFn: () => api<TreatmentPlan[]>(`/api/v1/clinical/patients/${patient.data?.id}/treatment-plans`), enabled: !!patient.data?.id });
+  const patient = useQuery({ queryKey: ["patient", "me"], queryFn: ({ signal }) => api<Patient>("/api/v1/patients/me", { signal }) });
+  const records = useQuery({ queryKey: ["patient-records", patient.data?.id], queryFn: ({ signal }) => api<PublishedRecord[]>(`/api/v1/clinical/patients/${patient.data?.id}/records`, { signal }), enabled: !!patient.data?.id });
+  const plans = useQuery({ queryKey: ["patient-treatment-plans", patient.data?.id], queryFn: ({ signal }) => api<TreatmentPlan[]>(`/api/v1/clinical/patients/${patient.data?.id}/treatment-plans`, { signal }), enabled: !!patient.data?.id });
   return <div className="mx-auto max-w-[1050px]">
     <div><p className="eyebrow">Hồ sơ sức khỏe</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.04em]">Kết quả khám</h1><p className="mt-2 text-sm text-[var(--muted)]">Chỉ hiển thị bệnh án bác sĩ đã chốt và các đơn thuốc đã phát hành.</p></div>
     {patient.isError ? <div role="alert" className="soft-card mt-6 p-6 text-sm text-[#a64f40]">Tài khoản chưa liên kết hồ sơ bệnh nhân. Vui lòng liên hệ phòng khám.</div> : null}
@@ -32,7 +32,7 @@ export function PatientRecords() {
 
 function RecordFiles({ recordId }: { recordId: string }) {
   const api = useApi();
-  const files = useQuery({ queryKey: ["published-record-files", recordId], queryFn: () => api<{ id: string; fileKind: string; filename: string; byteSize: number }[]>(`/api/v1/clinical/records/${recordId}/files`) });
+  const files = useQuery({ queryKey: ["published-record-files", recordId], queryFn: ({ signal }) => api<{ id: string; fileKind: string; filename: string; byteSize: number }[]>(`/api/v1/clinical/records/${recordId}/files`, { signal }) });
   if (files.isLoading || !files.data?.length) return null;
   return <section className="border-b border-[var(--line)] bg-[#fbfdfc] px-5 py-3"><h2 className="text-xs font-bold">Tệp đính kèm</h2><ul className="mt-2 grid gap-2">{files.data.map((file) => <li key={file.id} className="flex items-center justify-between gap-3 text-xs"><span>{file.filename} · {file.fileKind}</span><a className="font-bold text-[var(--teal-dark)]" href={`/api/bff/api/v1/clinical/files/${file.id}/content`}>Tải xuống</a></li>)}</ul></section>;
 }

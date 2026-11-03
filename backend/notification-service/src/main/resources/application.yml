@@ -5,6 +5,9 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/notification_db}
     username: ${DB_USER:notification_app}
     password: ${DB_PASSWORD:notification_local}
+    hikari:
+      minimum-idle: ${DB_POOL_MIN_IDLE:1}
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
   flyway.locations: classpath:db/migration
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}

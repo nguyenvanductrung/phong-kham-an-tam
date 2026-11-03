@@ -122,9 +122,10 @@ test("staff records a visit and the linked patient can read the signed result", 
   await signOut(page);
   await signIn(page, accountEmail, patientPassword);
   await page.goto("/records");
-  await expect(page.getByText(diagnosis)).toBeVisible();
+  await waitForPublishedDiagnosis(page, diagnosis);
+  await expect(page.getByText(diagnosis, { exact: true })).toBeVisible();
   await expect(page.getByText(medication)).toBeVisible();
-  await expect(page.getByText("36")).toBeVisible();
+  await expect(page.getByText("36", { exact: true })).toBeVisible();
   await expect(page.getByText(`e2e-${suffix}.pdf`)).toBeVisible();
   await expect(page.getByText("Kế hoạch điều trị đã được duyệt")).toBeVisible();
 
@@ -168,6 +169,22 @@ async function signIn(page: Page, email: string, password: string) {
   await page.getByLabel("Mật khẩu").fill(password);
   await page.getByRole("button", { name: "Đăng nhập" }).click();
   await expect(page).toHaveURL(/\/(dashboard|portal)$/);
+}
+
+async function waitForPublishedDiagnosis(page: Page, diagnosis: string) {
+  await expect.poll(async () => {
+    const responsePromise = page.waitForResponse(
+      (response) => response.request().method() === "GET"
+        && new URL(response.url()).pathname.includes("/clinical/patients/")
+        && new URL(response.url()).pathname.endsWith("/records"),
+      { timeout: 5_000 },
+    ).catch(() => null);
+    await page.reload();
+    const response = await responsePromise;
+    if (!response?.ok()) return false;
+    const records = await response.json() as { record: { diagnosis: string | null } }[];
+    return records.some(({ record }) => record.diagnosis === diagnosis);
+  }, { timeout: 30_000, intervals: [1_000] }).toBe(true);
 }
 
 test("staff can edit, archive, restore and delete an unused patient record", async ({ page }) => {

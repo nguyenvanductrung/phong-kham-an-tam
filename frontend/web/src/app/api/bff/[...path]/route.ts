@@ -31,8 +31,11 @@ async function forward(request: Request, context: RouteContext) {
     session = rotated;
   }
   const body = mutation ? await request.arrayBuffer() : undefined;
+  const upstreamSignal = mutation
+    ? request.signal
+    : AbortSignal.any([request.signal, AbortSignal.timeout(8_000)]);
   let upstream: Response;
-  try { upstream = await send(target, method, headers, session.accessToken, body); }
+  try { upstream = await send(target, method, headers, session.accessToken, body, upstreamSignal); }
   catch { return problem(503, "UPSTREAM_UNAVAILABLE", "Không thể kết nối hệ thống. Vui lòng thử lại."); }
   if (upstream.status === 401) {
     let rotated;
@@ -40,7 +43,7 @@ async function forward(request: Request, context: RouteContext) {
     catch (error) { if (error instanceof RefreshUnavailable) return problem(503, "AUTH_SERVICE_UNAVAILABLE", "Dịch vụ đăng nhập tạm thời chưa sẵn sàng."); throw error; }
     if (!rotated) return expire(stored.id);
     session = rotated;
-    try { upstream = await send(target, method, headers, session.accessToken, body); }
+    try { upstream = await send(target, method, headers, session.accessToken, body, upstreamSignal); }
     catch { return problem(503, "UPSTREAM_UNAVAILABLE", "Không thể kết nối hệ thống. Vui lòng thử lại."); }
   }
   const responseHeaders = new Headers({ "cache-control": "no-store" });
@@ -51,10 +54,10 @@ async function forward(request: Request, context: RouteContext) {
   return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
 }
 
-async function send(url: string, method: string, headers: Headers, token: string, body?: ArrayBuffer) {
+async function send(url: string, method: string, headers: Headers, token: string, body: ArrayBuffer | undefined, signal: AbortSignal) {
   const forwardHeaders = new Headers(headers);
   forwardHeaders.set("authorization", `Bearer ${token}`);
-  return fetch(url, { method, headers: forwardHeaders, body, cache: "no-store", redirect: "manual" });
+  return fetch(url, { method, headers: forwardHeaders, body, cache: "no-store", redirect: "manual", signal });
 }
 
 async function expire(id: string) {

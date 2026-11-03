@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Check, ClipboardPlus, FilePlus2, LockKeyhole, Paperclip, Pill, Plus, Save, Stethoscope } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { useApi } from "@/components/use-api";
@@ -49,27 +49,31 @@ export function ClinicalWorkspace() {
   const [clinicalFile, setClinicalFile] = useState<File | null>(null); const [fileKind, setFileKind] = useState("XRAY");
   const [planId, setPlanId] = useState(""); const [planServiceId, setPlanServiceId] = useState(""); const [planNotes, setPlanNotes] = useState("");
   const range = useMemo(() => rangeFor(date), [date]);
-  const appointments = useQuery({ queryKey: ["clinical-appointments", range.from], queryFn: () => api<Appointment[]>(`/api/v1/appointments?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`) });
+  const appointments = useQuery({ queryKey: ["clinical-appointments", range.from], queryFn: ({ signal }) => api<Appointment[]>(`/api/v1/appointments?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`, { signal }) });
   const selectedAppointment = appointments.data?.find((item) => item.id === selectedAppointmentId);
-  const appointmentRecord = useQuery({ queryKey: ["clinical-by-appointment", selectedAppointmentId], queryFn: () => api<Workspace>(`/api/v1/clinical/appointments/${selectedAppointmentId}/record`), enabled: !!selectedAppointmentId && !recordId, retry: false });
-  const recordWorkspace = useQuery({ queryKey: ["clinical-workspace", recordId], queryFn: () => api<Workspace>(`/api/v1/clinical/records/${recordId}/workspace`), enabled: !!recordId, retry: false });
+  const appointmentRecord = useQuery({ queryKey: ["clinical-by-appointment", selectedAppointmentId], queryFn: ({ signal }) => api<Workspace>(`/api/v1/clinical/appointments/${selectedAppointmentId}/record`, { signal }), enabled: !!selectedAppointmentId && !recordId, retry: false });
+  const recordWorkspace = useQuery({ queryKey: ["clinical-workspace", recordId], queryFn: ({ signal }) => api<Workspace>(`/api/v1/clinical/records/${recordId}/workspace`, { signal }), enabled: !!recordId, retry: false });
   const workspace = recordId ? recordWorkspace.data : appointmentRecord.data;
-  const services = useQuery({ queryKey: ["catalog", "services"], queryFn: () => api<Service[]>("/api/v1/catalog/services") });
-  const files = useQuery({ queryKey: ["clinical-files", workspace?.record.id], queryFn: () => api<ClinicalFile[]>(`/api/v1/clinical/records/${workspace?.record.id}/files`), enabled: !!workspace?.record.id });
-  const treatmentPlan = useQuery({ queryKey: ["treatment-plan", planId], queryFn: () => api<TreatmentPlan>(`/api/v1/clinical/treatment-plans/${planId}`), enabled: !!planId });
-  const history = useQuery({ queryKey: ["clinical-history", selectedAppointment?.patientId], queryFn: () => api<RecordItem[]>(`/api/v1/clinical/patients/${selectedAppointment?.patientId}/records`), enabled: !!selectedAppointment?.patientId });
+  const services = useQuery({ queryKey: ["catalog", "services"], queryFn: ({ signal }) => api<Service[]>("/api/v1/catalog/services", { signal }), staleTime: 60_000 });
+  const files = useQuery({ queryKey: ["clinical-files", workspace?.record.id], queryFn: ({ signal }) => api<ClinicalFile[]>(`/api/v1/clinical/records/${workspace?.record.id}/files`, { signal }), enabled: !!workspace?.record.id });
+  const treatmentPlan = useQuery({ queryKey: ["treatment-plan", planId], queryFn: ({ signal }) => api<TreatmentPlan>(`/api/v1/clinical/treatment-plans/${planId}`, { signal }), enabled: !!planId });
+  const history = useQuery({ queryKey: ["clinical-history", selectedAppointment?.patientId], queryFn: ({ signal }) => api<RecordItem[]>(`/api/v1/clinical/patients/${selectedAppointment?.patientId}/records`, { signal }), enabled: !!selectedAppointment?.patientId });
   const form = useForm<DraftValues>({ resolver: zodResolver(draftSchema), defaultValues: { chiefComplaint: "", medicalHistory: "", examinationNotes: "", diagnosis: "", treatmentNotes: "", followUpAt: "" } });
+  const formRecordId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!workspace) return;
     const record = workspace.record;
-    form.reset({ chiefComplaint: record.chiefComplaint ?? "", medicalHistory: record.medicalHistory ?? "", examinationNotes: record.examinationNotes ?? "", diagnosis: record.diagnosis ?? "", treatmentNotes: record.treatmentNotes ?? "", followUpAt: localInput(record.followUpAt) });
+    const values = { chiefComplaint: record.chiefComplaint ?? "", medicalHistory: record.medicalHistory ?? "", examinationNotes: record.examinationNotes ?? "", diagnosis: record.diagnosis ?? "", treatmentNotes: record.treatmentNotes ?? "", followUpAt: localInput(record.followUpAt) };
+    const sameRecord = formRecordId.current === record.id;
+    formRecordId.current = record.id;
+    form.reset(values, sameRecord ? { keepDirtyValues: true } : undefined);
   }, [workspace, form]);
 
   const refreshRecord = async () => { await cache.invalidateQueries({ queryKey: ["clinical-workspace"] }); await cache.invalidateQueries({ queryKey: ["clinical-by-appointment"] }); await cache.invalidateQueries({ queryKey: ["clinical-history"] }); };
   const openRecord = useMutation({ mutationFn: () => api<RecordItem>("/api/v1/clinical/records/from-appointment", { method: "POST", body: JSON.stringify({ appointmentId: selectedAppointmentId }) }), onSuccess: (record) => { setRecordId(record.id); setError(""); setNotice(`Đã mở bản nháp ${record.recordNumber}.`); void appointments.refetch(); }, onError: showError });
   const startVisit = useMutation({ mutationFn: (appointment: Appointment) => api<Appointment>(`/api/v1/appointments/${appointment.id}/commands`, { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ type: "START" }) }), onSuccess: async (appointment) => { setNotice(`Lượt khám ${appointment.appointmentNumber} đã bắt đầu.`); setError(""); await appointments.refetch(); }, onError: showError });
-  const saveDraft = useMutation({ mutationFn: (values: DraftValues) => { const record = workspace?.record; if (!record) throw new Error("Chưa mở bệnh án."); return api<RecordItem>(`/api/v1/clinical/records/${record.id}`, { method: "PUT", body: JSON.stringify({ ...values, followUpAt: toIso(values.followUpAt), version: record.version }) }); }, onSuccess: async (record) => { setRecordId(record.id); setNotice("Bản nháp đã được lưu."); setError(""); await refreshRecord(); }, onError: async (cause) => { showError(cause); if (cause instanceof ApiError && cause.status === 409) await recordWorkspace.refetch(); } });
+  const saveDraft = useMutation({ mutationFn: (values: DraftValues) => { const record = workspace?.record; if (!record) throw new Error("Chưa mở bệnh án."); return api<RecordItem>(`/api/v1/clinical/records/${record.id}`, { method: "PUT", body: JSON.stringify({ ...values, followUpAt: toIso(values.followUpAt), version: record.version }) }); }, onSuccess: async (record) => { setRecordId(record.id); formRecordId.current = record.id; form.reset({ chiefComplaint: record.chiefComplaint ?? "", medicalHistory: record.medicalHistory ?? "", examinationNotes: record.examinationNotes ?? "", diagnosis: record.diagnosis ?? "", treatmentNotes: record.treatmentNotes ?? "", followUpAt: localInput(record.followUpAt) }); setNotice("Bản nháp đã được lưu."); setError(""); await refreshRecord(); }, onError: async (cause) => { showError(cause); if (cause instanceof ApiError && cause.status === 409) await recordWorkspace.refetch(); } });
   const addTooth = useMutation({ mutationFn: () => { if (!workspace) throw new Error("Chưa mở bệnh án."); const parsed = Number(toothNumber); if (!isFdi(parsed)) throw new Error("Số răng phải theo hệ FDI (11–48 hoặc 51–85)."); return api(`/api/v1/clinical/records/${workspace.record.id}/teeth`, { method: "POST", body: JSON.stringify({ toothNumber: parsed, conditionCode, surfaces: [], notes: toothNotes || null }) }); }, onSuccess: async () => { setToothNumber(""); setToothNotes(""); setNotice("Đã ghi nhận tình trạng răng."); setError(""); await refreshRecord(); }, onError: showError });
   const addProcedure = useMutation({ mutationFn: () => { if (!workspace || !serviceId) throw new Error("Chọn thủ thuật trong danh mục."); const teeth = procedureTeeth.split(",").map((value) => value.trim()).filter(Boolean).map(Number); if (teeth.some((value) => !isFdi(value))) throw new Error("Danh sách răng phải dùng số FDI, ngăn cách bằng dấu phẩy."); return api(`/api/v1/clinical/records/${workspace.record.id}/procedures`, { method: "POST", body: JSON.stringify({ serviceId, toothNumbers: teeth, quantity: 1, discountAmount: 0, notes: procedureNotes || null }) }); }, onSuccess: async () => { setProcedureNotes(""); setProcedureTeeth(""); setNotice("Đã thêm thủ thuật thực tế."); setError(""); await refreshRecord(); }, onError: showError });
   const signRecord = useMutation({ mutationFn: ({ id, version }: { id: string; version: number }) => api<RecordItem>(`/api/v1/clinical/records/${id}/sign?version=${version}`, { method: "POST" }), onSuccess: async (record) => { setNotice(`Bệnh án ${record.recordNumber} đã được chốt.`); setError(""); await refreshRecord(); await appointments.refetch(); }, onError: showError });
@@ -80,7 +84,7 @@ export function ClinicalWorkspace() {
   const addPlanItem = useMutation({ mutationFn: () => { if (!treatmentPlan.data || !planServiceId) throw new Error("Chọn dịch vụ cho kế hoạch."); return api(`/api/v1/clinical/treatment-plans/${treatmentPlan.data.id}/items`, { method: "POST", body: JSON.stringify({ serviceId: planServiceId, quantity: 1, notes: planNotes || null }) }); }, onSuccess: async () => { setPlanNotes(""); setNotice("Đã thêm hạng mục điều trị."); setError(""); await treatmentPlan.refetch(); }, onError: showError });
   const approvePlan = useMutation({ mutationFn: () => { if (!treatmentPlan.data) throw new Error("Mở kế hoạch điều trị trước."); return api<TreatmentPlan>(`/api/v1/clinical/treatment-plans/${treatmentPlan.data.id}/approve?version=${treatmentPlan.data.version}`, { method: "POST" }); }, onSuccess: async () => { setNotice("Kế hoạch điều trị đã được duyệt và khóa chỉnh sửa."); setError(""); await treatmentPlan.refetch(); }, onError: showError });
 
-  function selectAppointment(id: string) { setSelectedAppointmentId(id); setRecordId(""); setPlanId(""); setError(""); setNotice(""); }
+  function selectAppointment(id: string) { if (id !== selectedAppointmentId && form.formState.isDirty && !window.confirm("Bệnh án có thay đổi chưa lưu. Chuyển lượt khám sẽ bỏ các thay đổi này. Bạn có muốn tiếp tục?")) return; setSelectedAppointmentId(id); setRecordId(""); setPlanId(""); setToothNumber(""); setToothNotes(""); setProcedureTeeth(""); setProcedureNotes(""); setMedicationName(""); setDosage(""); setFrequency(""); setQuantity(""); setRxNotes(""); setClinicalFile(null); setPlanNotes(""); setAmendmentReason(""); setError(""); setNotice(""); }
   function showError(cause: unknown) { setError(cause instanceof ApiError ? `${cause.code}: ${cause.message}` : cause instanceof Error ? cause.message : "Không thể hoàn thành thao tác. Vui lòng thử lại."); setNotice(""); }
   const recordMissing = appointmentRecord.error instanceof ApiError && appointmentRecord.error.status === 404;
   const visitItems = appointments.data?.filter((item) => ["ARRIVED", "IN_PROGRESS"].includes(item.status)) ?? [];

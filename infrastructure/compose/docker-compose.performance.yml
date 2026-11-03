@@ -1,0 +1,47 @@
+# Opt-in laptop profile; apply with the base compose file and this file.
+# Starts every application dependency at its existing scale while bounding JVMs.
+services:
+  web:
+    mem_limit: 640m
+    environment:
+      NODE_OPTIONS: --max-old-space-size=384
+
+  identity-service:
+    mem_limit: 512m
+    environment:
+      JAVA_TOOL_OPTIONS: -Xms64m -Xmx256m -Duser.timezone=UTC
+      DB_POOL_MIN_IDLE: ${DB_POOL_MIN_IDLE:-1}
+      DB_POOL_MAX_SIZE: ${DB_POOL_MAX_SIZE:-5}
+
+  patient-service:
+    mem_limit: 512m
+    environment:
+      JAVA_TOOL_OPTIONS: -Xms64m -Xmx256m -Duser.timezone=UTC
+      DB_POOL_MIN_IDLE: ${DB_POOL_MIN_IDLE:-1}
+      DB_POOL_MAX_SIZE: ${DB_POOL_MAX_SIZE:-5}
+
+  scheduling-service:
+    mem_limit: 640m
+    environment:
+      JAVA_TOOL_OPTIONS: -Xms64m -Xmx384m -Duser.timezone=UTC
+      DB_POOL_MIN_IDLE: ${DB_POOL_MIN_IDLE:-1}
+      DB_POOL_MAX_SIZE: ${DB_POOL_MAX_SIZE:-5}
+
+  clinical-service:
+    mem_limit: 640m
+    environment:
+      JAVA_TOOL_OPTIONS: -Xms64m -Xmx384m -Duser.timezone=UTC
+      DB_POOL_MIN_IDLE: ${DB_POOL_MIN_IDLE:-1}
+      DB_POOL_MAX_SIZE: ${DB_POOL_MAX_SIZE:-5}
+
+  notification-service:
+    mem_limit: 512m
+    environment:
+      JAVA_TOOL_OPTIONS: -Xms64m -Xmx256m -Duser.timezone=UTC
+      DB_POOL_MIN_IDLE: ${DB_POOL_MIN_IDLE:-1}
+      DB_POOL_MAX_SIZE: ${DB_POOL_MAX_SIZE:-5}
+
+  api-gateway:
+    mem_limit: 512m
+    environment:
+      JAVA_TOOL_OPTIONS: -Xms64m -Xmx256m -Duser.timezone=UTC

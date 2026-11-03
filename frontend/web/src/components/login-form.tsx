@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Activity, ArrowRight, BadgeCheck, CalendarDays, HeartPulse, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,9 +16,9 @@ type LoginValues=z.infer<typeof schema>;
 const demos=[{label:"Lễ tân",email:"receptionist@antam.local"},{label:"Bác sĩ",email:"doctor@antam.local"},{label:"Bệnh nhân",email:"patient@antam.local"}];
 
 export function LoginForm(){
-  const router=useRouter();const [error,setError]=useState("");const [busy,setBusy]=useState(false);
+  const router=useRouter();const queryClient=useQueryClient();const [error,setError]=useState("");const [busy,setBusy]=useState(false);
   const {register,handleSubmit,setValue,formState:{errors}}=useForm<LoginValues>({resolver:zodResolver(schema),defaultValues:{email:"",password:""}});
-  async function submit(values:LoginValues){setError("");setBusy(true);try{const response=await fetch("/api/auth/login",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(values)});const result=await response.json();if(!response.ok)throw new Error(result.detail??"Email hoặc mật khẩu không đúng.");router.replace(result.roles.includes("PATIENT")?"/portal":"/dashboard");router.refresh();}catch(e){setError(e instanceof Error?e.message:"Không thể đăng nhập.");}finally{setBusy(false);}}
+  async function submit(values:LoginValues){setError("");setBusy(true);try{const response=await fetch("/api/auth/login",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(values)});const result=await response.json();if(!response.ok)throw new Error(result.detail??"Email hoặc mật khẩu không đúng.");await queryClient.cancelQueries();queryClient.clear();router.replace(result.roles.includes("PATIENT")?"/portal":"/dashboard");router.refresh();}catch(e){setError(e instanceof Error?e.message:"Không thể đăng nhập.");}finally{setBusy(false);}}
   return <main className="grid min-h-screen bg-[var(--paper)] lg:grid-cols-[minmax(0,1.02fr)_minmax(460px,.98fr)]">
     <section className="relative hidden overflow-hidden bg-[var(--nav)] px-12 py-10 text-white lg:flex lg:flex-col xl:px-20">
       <div className="absolute -right-36 top-12 size-[520px] rounded-full border border-white/10"/><div className="absolute -right-12 top-36 size-[320px] rounded-full border border-white/10"/><div className="absolute right-20 top-[290px] h-20 w-56 -rotate-12 rounded-[50%] border-b border-[#d9967c]/55"/><div className="absolute bottom-[-140px] left-[-90px] size-[420px] rounded-full border border-[#d9967c]/20"/>

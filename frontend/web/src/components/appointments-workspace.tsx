@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, Check, Plus, RefreshCw, Search, Stethoscope, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useApi } from "@/components/use-api";
+import { useDebouncedValue } from "@/components/use-debounced-value";
 import { useSession } from "@/components/session-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,7 @@ export function AppointmentsWorkspace() {
   const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [patientSearch, setPatientSearch] = useState("");
+  const debouncedPatientSearch = useDebouncedValue(patientSearch);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [doctorId, setDoctorId] = useState("");
   const [serviceId, setServiceId] = useState("");
@@ -67,23 +69,23 @@ export function AppointmentsWorkspace() {
   const range = useMemo(() => clinicRange(date, period), [date, period]);
   const appointmentsQuery = useQuery({
     queryKey: ["appointments", range.from, range.to],
-    queryFn: () => api.operation("/api/v1/appointments", "get", { query: { from: range.from, to: range.to } }),
+    queryFn: ({ signal }) => api.operation("/api/v1/appointments", "get", { query: { from: range.from, to: range.to }, signal }),
   });
-  const doctorsQuery = useQuery({ queryKey: ["catalog", "doctors"], queryFn: () => api.operation("/api/v1/catalog/doctors", "get", {}) });
-  const chairsQuery = useQuery({ queryKey: ["catalog", "chairs"], queryFn: () => api.operation("/api/v1/catalog/chairs", "get", {}) });
-  const servicesQuery = useQuery({ queryKey: ["catalog", "services"], queryFn: () => api.operation("/api/v1/catalog/services", "get", {}) });
-  const currentPatientQuery = useQuery({ queryKey: ["patient", "me"], queryFn: () => api.operation("/api/v1/patients/me", "get", {}), enabled: isPatient });
+  const doctorsQuery = useQuery({ queryKey: ["catalog", "doctors"], queryFn: ({ signal }) => api.operation("/api/v1/catalog/doctors", "get", { signal }), staleTime: 60_000 });
+  const chairsQuery = useQuery({ queryKey: ["catalog", "chairs"], queryFn: ({ signal }) => api.operation("/api/v1/catalog/chairs", "get", { signal }), staleTime: 60_000 });
+  const servicesQuery = useQuery({ queryKey: ["catalog", "services"], queryFn: ({ signal }) => api.operation("/api/v1/catalog/services", "get", { signal }), staleTime: 60_000 });
+  const currentPatientQuery = useQuery({ queryKey: ["patient", "me"], queryFn: ({ signal }) => api.operation("/api/v1/patients/me", "get", { signal }), enabled: isPatient });
   const patientSearchQuery = useQuery({
-    queryKey: ["patients", "appointment-picker", patientSearch],
-    queryFn: () => api.operation("/api/v1/patients", "get", { query: { q: patientSearch, page: 0, size: 8 } }),
-    enabled: !isPatient && createOpen && patientSearch.trim().length >= 2 && !selectedPatient,
+    queryKey: ["patients", "appointment-picker", debouncedPatientSearch],
+    queryFn: ({ signal }) => api.operation("/api/v1/patients", "get", { query: { q: debouncedPatientSearch, page: 0, size: 8 }, signal }),
+    enabled: !isPatient && createOpen && debouncedPatientSearch.trim().length >= 2 && patientSearch.trim() === debouncedPatientSearch.trim() && !selectedPatient,
   });
   const selectedService = servicesQuery.data?.find((service) => service.id === serviceId);
   const effectiveDoctorId = rescheduleTarget ? appointmentsQuery.data?.find((item) => item.id === rescheduleTarget.id)?.doctorId ?? "" : doctorId;
   const effectiveDuration = rescheduleTarget?.durationMinutes ?? selectedService?.durationMinutes;
   const availabilityQuery = useQuery({
     queryKey: ["availability", effectiveDoctorId, bookingDate, effectiveDuration],
-    queryFn: () => api.operation("/api/v1/availability", "get", { query: { doctorId: effectiveDoctorId, date: bookingDate, durationMinutes: effectiveDuration ?? 15 } }),
+    queryFn: ({ signal }) => api.operation("/api/v1/availability", "get", { query: { doctorId: effectiveDoctorId, date: bookingDate, durationMinutes: effectiveDuration ?? 15 }, signal }),
     enabled: (createOpen || !!rescheduleTarget) && !!effectiveDoctorId && !!effectiveDuration && !!bookingDate,
   });
 
@@ -189,7 +191,7 @@ export function AppointmentsWorkspace() {
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           {!isPatient && !rescheduleTarget ? <div className="sm:col-span-2"><Field label="Tìm hồ sơ bệnh nhân"><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#98a6aa]" size={16}/><Input className="pl-9" value={selectedPatient ? `${selectedPatient.fullName} · ${selectedPatient.patientCode}` : patientSearch} onChange={(event) => { setSelectedPatient(null); setPatientSearch(event.target.value); }} placeholder="Nhập tên, mã hồ sơ hoặc số điện thoại" aria-label="Tìm bệnh nhân"/></div></Field>
             {patientSearchQuery.isFetching ? <p className="mt-2 text-xs text-[var(--muted)]">Đang tìm hồ sơ…</p> : null}
-            {patientSearchQuery.data?.items.length ? <div className="mt-2 max-h-44 overflow-auto rounded-xl border border-[var(--line)]">{patientSearchQuery.data.items.map((patient) => <button key={patient.id} className="flex w-full items-center justify-between border-b border-[var(--line)] px-3 py-2.5 text-left last:border-0 hover:bg-[#f6faf9]" onClick={() => { setSelectedPatient(patient); setPatientSearch(""); }}><span><span className="block text-xs font-bold">{patient.fullName}</span><span className="mt-1 block text-[10px] text-[var(--muted)]">{patient.patientCode} · {patient.phone}</span></span><span className="text-xs text-[var(--teal-dark)]">Chọn</span></button>)}</div> : null}
+            {!selectedPatient && patientSearch.trim() === debouncedPatientSearch.trim() && patientSearchQuery.data?.items.length ? <div className="mt-2 max-h-44 overflow-auto rounded-xl border border-[var(--line)]">{patientSearchQuery.data.items.map((patient) => <button key={patient.id} className="flex w-full items-center justify-between border-b border-[var(--line)] px-3 py-2.5 text-left last:border-0 hover:bg-[#f6faf9]" onClick={() => { setSelectedPatient(patient); setPatientSearch(""); }}><span><span className="block text-xs font-bold">{patient.fullName}</span><span className="mt-1 block text-[10px] text-[var(--muted)]">{patient.patientCode} · {patient.phone}</span></span><span className="text-xs text-[var(--teal-dark)]">Chọn</span></button>)}</div> : null}
             {selectedPatient ? <p className="mt-2 text-xs text-[var(--teal-dark)]">Đã chọn: {selectedPatient.fullName} · {selectedPatient.phone}</p> : null}
           </div> : null}
           {!rescheduleTarget ? <Field label="Dịch vụ"><select className={inputClass} value={serviceId} onChange={(event) => { setServiceId(event.target.value); setSlotAt(""); setChairId(""); }}><option value="">Chọn dịch vụ</option>{(servicesQuery.data ?? []).map((service) => <option key={service.id} value={service.id}>{service.name} · {service.durationMinutes} phút · {formatMoney(service.price)}</option>)}</select></Field> : <div className="rounded-xl bg-[#f5f8f7] p-3 text-xs text-[var(--muted)]">Giữ nguyên bác sĩ và thời lượng: <strong className="text-[var(--ink)]">{effectiveDuration} phút</strong></div>}
