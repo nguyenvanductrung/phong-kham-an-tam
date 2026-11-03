@@ -50,6 +50,6 @@ public class PatientLookupClient {
     }
     private static ApiException missing() { return new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "PATIENT_REFERENCE_INVALID", "Hồ sơ bệnh nhân không tồn tại."); }
     public record PatientSummary(UUID id,String patientCode,String fullName,String phone,String email,LocalDate dateOfBirth,
-                                 String gender,String address,String emergencyContact,String emergencyPhone,Instant createdAt) {}
+                                 String gender,String address,String emergencyContact,String emergencyPhone,Instant createdAt,Instant archivedAt) {}
 }
 

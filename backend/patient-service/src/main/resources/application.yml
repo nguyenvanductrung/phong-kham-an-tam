@@ -20,6 +20,7 @@ security:
   audience: ${JWT_AUDIENCE:clinic-api}
   jwks-uri: ${JWT_JWKS_URI:http://identity-service:8081/.well-known/jwks.json}
 app.demo-password: ${DEMO_LOGIN_PASSWORD:}
+app.scheduling-service-url: ${SCHEDULING_BASE_URL:http://scheduling-service:8083}
 spring.rabbitmq:
   host: ${RABBITMQ_HOST:localhost}
   port: ${RABBITMQ_PORT:5672}

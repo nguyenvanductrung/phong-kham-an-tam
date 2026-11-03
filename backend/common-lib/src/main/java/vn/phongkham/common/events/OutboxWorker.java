@@ -4,35 +4,28 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.jdbc.core.JdbcTemplate;
+import vn.phongkham.common.persistence.OutboxWorkerDao;
+import vn.phongkham.common.persistence.OutboxWorkerDao.*;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
-import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 @Component
 @ConditionalOnProperty(name="events.outbox.enabled",havingValue="true")
 public class OutboxWorker {
-    private final JdbcTemplate jdbc;
+    private final OutboxWorkerDao dao;
     private final TransactionTemplate transaction;
     private final RabbitTemplate rabbit;
     private final JsonMapper mapper;
-    public OutboxWorker(JdbcTemplate jdbc,TransactionTemplate transaction,RabbitTemplate rabbit,JsonMapper mapper){this.jdbc=jdbc;this.transaction=transaction;this.rabbit=rabbit;this.mapper=mapper;}
+    public OutboxWorker(OutboxWorkerDao dao,TransactionTemplate transaction,RabbitTemplate rabbit,JsonMapper mapper){this.dao=dao;this.transaction=transaction;this.rabbit=rabbit;this.mapper=mapper;}
 
     @Scheduled(fixedDelayString="${events.outbox.poll-ms:1000}")
     public void publishBatch(){
         transaction.executeWithoutResult(status->{
-            List<Row> rows=jdbc.query("""
-                    SELECT o.event_id,o.event_type,o.schema_version,o.occurred_at,o.aggregate_id,o.aggregate_version,o.correlation_id,o.payload,o.attempts
-                    FROM outbox_events o WHERE o.published_at IS NULL AND o.dead_lettered_at IS NULL
-                    AND NOT EXISTS (SELECT 1 FROM outbox_events earlier WHERE earlier.aggregate_id=o.aggregate_id AND earlier.aggregate_version<o.aggregate_version AND earlier.published_at IS NULL AND earlier.dead_lettered_at IS NULL)
-                    ORDER BY o.created_at LIMIT 20 FOR UPDATE OF o SKIP LOCKED
-                    """,(rs,n)->new Row(rs.getObject("event_id",UUID.class),rs.getString("event_type"),rs.getInt("schema_version"),rs.getTimestamp("occurred_at").toInstant(),rs.getObject("aggregate_id",UUID.class),rs.getLong("aggregate_version"),rs.getString("correlation_id"),rs.getString("payload"),rs.getInt("attempts")));
+            List<Row> rows=dao.findPendingEvents();
             for(Row row:rows)send(row);
         });
     }
@@ -52,9 +45,9 @@ public class OutboxWorker {
             },confirm);
             var result=confirm.getFuture().get(5,TimeUnit.SECONDS);
             if(!result.isAck())throw new IllegalStateException("RabbitMQ rejected event: "+result.getReason());
-            jdbc.update("UPDATE outbox_events SET published_at=now(),attempts=?,last_error=NULL WHERE event_id=?",attempt,row.eventId());
+            dao.markPublished(attempt, row.eventId());
         }catch(Exception error){
-            jdbc.update("UPDATE outbox_events SET attempts=?,last_error=? WHERE event_id=?",attempt,safe(error.getMessage()),row.eventId());
+            dao.recordFailure(attempt, safe(error.getMessage()), row.eventId());
             if(attempt>=8) deadLetter(row,error);
         }
     }
@@ -63,10 +56,10 @@ public class OutboxWorker {
             String body=mapper.writeValueAsString(new ClinicEvent(row.eventId(),row.eventType(),row.schemaVersion(),row.occurredAt(),row.aggregateId(),row.aggregateVersion(),row.correlationId(),mapper.readTree(row.payload())));
             CorrelationData confirm=new CorrelationData(row.eventId()+"-dlq");
             rabbit.convertAndSend("clinic.events.dlx","outbox.failed",body,message->{message.getMessageProperties().setMessageId(row.eventId().toString());message.getMessageProperties().setHeader("failure",safe(cause.getMessage()));return message;},confirm);
-            if(confirm.getFuture().get(5,TimeUnit.SECONDS).isAck())jdbc.update("UPDATE outbox_events SET dead_lettered_at=now() WHERE event_id=?",row.eventId());
+            if(confirm.getFuture().get(5,TimeUnit.SECONDS).isAck())dao.retryEvent(row.eventId());
         }catch(Exception ignored){ }
     }
     private static String safe(String text){if(text==null)return "publish_failed";return text.length()>500?text.substring(0,500):text;}
-    private record Row(UUID eventId,String eventType,int schemaVersion,Instant occurredAt,UUID aggregateId,long aggregateVersion,String correlationId,String payload,int attempts){}
+
 }
 

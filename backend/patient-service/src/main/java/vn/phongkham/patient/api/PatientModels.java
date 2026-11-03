@@ -10,7 +10,7 @@ public final class PatientModels {
     private PatientModels() {}
     public record CreatePatientRequest(@NotBlank @Size(max=200) String fullName,
                                        @NotBlank @Size(max=32) String phone,
-                                       @Size(max=254) String email,
+                                       @jakarta.validation.constraints.Email @Size(max=254) String email,
                                        String gender, LocalDate dateOfBirth,
                                        @Size(max=500) String address,
                                        @Size(max=500) String emergencyContact,
@@ -19,11 +19,18 @@ public final class PatientModels {
                                        @Size(max=4000) String medicalHistory) {}
     public record PatientSummary(UUID id, String patientCode, String fullName, String phone, String email,
                                  LocalDate dateOfBirth, String gender, String address, String emergencyContact,
-                                 String emergencyPhone, java.time.Instant createdAt) {}
+                                 String emergencyPhone, java.time.Instant createdAt, java.time.Instant archivedAt) {}
+    public record UpdatePatientRequest(@NotBlank @Size(min=2,max=200) String fullName,
+                                       @NotBlank @Size(min=8,max=32) String phone,
+                                       @jakarta.validation.constraints.Email @Size(max=254) String email, String gender,
+                                       @jakarta.validation.constraints.PastOrPresent LocalDate dateOfBirth,
+                                       @Size(max=500) String address,
+                                       @Size(max=500) String emergencyContact,
+                                       @Size(max=32) String emergencyPhone) {}
     public record PatientDetail(UUID id, String patientCode, String fullName, String phone, String email,
                                 LocalDate dateOfBirth, String gender, String address, String emergencyContact,
                                 String emergencyPhone, String allergies, String medicalHistory, String notes,
-                                java.time.Instant createdAt, java.time.Instant updatedAt) {}
+                                java.time.Instant createdAt, java.time.Instant updatedAt, java.time.Instant archivedAt) {}
     public record PatientPage(java.util.List<PatientSummary> items, int page, int size, boolean hasNext) {}
     public record LinkAccountRequest(@jakarta.validation.constraints.NotNull UUID userId) {}
     public record AccountLink(boolean linked,UUID userId) {}

@@ -117,7 +117,7 @@ test("staff records a visit and the linked patient can read the signed result", 
   await candidateInput.fill(accountEmail);
   await page.getByRole("button", { name: new RegExp(accountEmail) }).click();
   await page.getByRole("button", { name: "Liên kết tài khoản" }).click();
-  await expect(page.getByRole("status")).toContainText("Đã liên kết");
+  await expect(page.getByText("Đã liên kết với tài khoản bệnh nhân.", { exact: true })).toBeVisible();
 
   await signOut(page);
   await signIn(page, accountEmail, patientPassword);
@@ -127,6 +127,39 @@ test("staff records a visit and the linked patient can read the signed result", 
   await expect(page.getByText("36")).toBeVisible();
   await expect(page.getByText(`e2e-${suffix}.pdf`)).toBeVisible();
   await expect(page.getByText("Kế hoạch điều trị đã được duyệt")).toBeVisible();
+
+  await signOut(page);
+  await signIn(page, manager, demoPassword);
+  await page.goto("/patients");
+  await page.getByLabel("Tìm bệnh nhân", { exact: true }).fill(patientName);
+  await page.getByRole("row").filter({ hasText: patientName }).click();
+  await page.getByRole("button", { name: "Xóa", exact: true }).click();
+  const deleteDialog = page.getByRole("dialog", { name: "Xóa vĩnh viễn" });
+  await deleteDialog.getByRole("button", { name: "Xóa vĩnh viễn", exact: true }).click();
+  await expect(deleteDialog.getByRole("alert")).toContainText("đã được liên kết hoặc sử dụng");
+  await deleteDialog.getByRole("button", { name: "Đóng", exact: true }).click();
+  await page.getByRole("button", { name: "Lưu trữ", exact: true }).click();
+  const archiveDialog = page.getByRole("dialog", { name: "Lưu trữ hồ sơ" });
+  await archiveDialog.getByRole("button", { name: "Lưu trữ hồ sơ", exact: true }).click();
+  await expect(archiveDialog).not.toBeVisible();
+  await signOut(page);
+  await signIn(page, accountEmail, patientPassword);
+  await expect(page.getByRole("status")).toContainText("Hồ sơ đang được lưu trữ");
+  await expect(page.getByRole("button", { name: "Đặt lịch khám", exact: true })).toHaveCount(0);
+  await page.goto("/records");
+  await expect(page.getByText(diagnosis)).toBeVisible();
+  await expect(page.getByText(medication)).toBeVisible();
+  await expect(page.getByText(`e2e-${suffix}.pdf`)).toBeVisible();
+  await signOut(page);
+  await signIn(page, manager, demoPassword);
+  await page.goto("/patients");
+  await page.getByLabel("Lọc trạng thái hồ sơ").selectOption("ARCHIVED");
+  await page.getByLabel("Tìm bệnh nhân", { exact: true }).fill(patientName);
+  await page.getByRole("row").filter({ hasText: patientName }).click();
+  await page.getByRole("button", { name: "Khôi phục", exact: true }).click();
+  const restoreDialog = page.getByRole("dialog", { name: "Khôi phục hồ sơ" });
+  await restoreDialog.getByRole("button", { name: "Khôi phục hồ sơ", exact: true }).click();
+  await expect(restoreDialog).not.toBeVisible();
 });
 
 async function signIn(page: Page, email: string, password: string) {
@@ -137,8 +170,49 @@ async function signIn(page: Page, email: string, password: string) {
   await expect(page).toHaveURL(/\/(dashboard|portal)$/);
 }
 
+test("staff can edit, archive, restore and delete an unused patient record", async ({ page }) => {
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const originalName = `CRUD Patient ${suffix}`;
+  const updatedName = `Updated CRUD ${suffix}`;
+  await signIn(page, receptionist, demoPassword);
+  await page.goto("/patients");
+  await page.getByRole("button", { name: "Thêm bệnh nhân" }).click();
+  let dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Họ và tên").fill(originalName);
+  await dialog.getByLabel("Số điện thoại").fill("0900000000");
+  await dialog.getByRole("button", { name: "Lưu hồ sơ", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await page.getByRole("button", { name: "Sửa thông tin", exact: true }).click();
+  dialog = page.getByRole("dialog", { name: "Sửa thông tin bệnh nhân" });
+  await dialog.getByLabel("Họ và tên").fill(updatedName);
+  await dialog.getByLabel("Số điện thoại", { exact: true }).fill("0911111111");
+  await dialog.getByRole("button", { name: "Lưu thay đổi" }).click();
+  await expect(dialog).not.toBeVisible();
+  await page.getByLabel("Tìm bệnh nhân", { exact: true }).fill(updatedName);
+  await expect(page.getByRole("row").filter({ hasText: updatedName })).toContainText("0911111111");
+  await page.getByRole("button", { name: "Lưu trữ", exact: true }).click();
+  dialog = page.getByRole("dialog", { name: "Lưu trữ hồ sơ" });
+  await dialog.getByRole("button", { name: "Lưu trữ hồ sơ", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByRole("row").filter({ hasText: updatedName })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Đặt lịch khám", exact: true })).toHaveCount(0);
+  await page.getByLabel("Lọc trạng thái hồ sơ").selectOption("ARCHIVED");
+  await page.getByRole("row").filter({ hasText: updatedName }).click();
+  await page.getByRole("button", { name: "Khôi phục", exact: true }).click();
+  dialog = page.getByRole("dialog", { name: "Khôi phục hồ sơ" });
+  await dialog.getByRole("button", { name: "Khôi phục hồ sơ", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await page.getByLabel("Lọc trạng thái hồ sơ").selectOption("ACTIVE");
+  await page.getByRole("row").filter({ hasText: updatedName }).click();
+  await page.getByRole("button", { name: "Xóa", exact: true }).click();
+  dialog = page.getByRole("dialog", { name: "Xóa vĩnh viễn" });
+  await dialog.getByRole("button", { name: "Xóa vĩnh viễn", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByRole("row").filter({ hasText: updatedName })).toHaveCount(0);
+});
+
 async function signOut(page: Page) {
-  await page.getByRole("button", { name: "Đăng xuất" }).click();
+  await page.getByRole("button", { name: "Đăng xuất", exact: true }).first().click();
   await expect(page).toHaveURL(/\/login$/);
 }
 
@@ -153,7 +227,8 @@ async function findBookableDate(page: Page, dialog: ReturnType<Page["getByRole"]
     if (weekday === "Sun") continue;
 
     const responsePromise = page.waitForResponse(
-      (response) => response.url().includes("availability?") && response.request().method() === "GET",
+      (response) => response.url().includes("availability?") && response.request().method() === "GET"
+        && new URL(response.url()).searchParams.get("date") === date,
       { timeout: 20_000 },
     );
     await dateInput.fill(date);

@@ -94,6 +94,7 @@ export function AppointmentsWorkspace() {
   const createMutation = useMutation({
     mutationFn: async () => {
       const patient = isPatient ? currentPatientQuery.data : selectedPatient;
+      if(patient?.archivedAt) throw new Error("Hãy khôi phục hồ sơ trước khi đặt lịch mới.");
       if (!patient || !selectedService || !slotAt || !chairId || !doctorId) throw new Error("Chọn bệnh nhân, bác sĩ, dịch vụ và giờ khám còn trống.");
       return api.operation("/api/v1/appointments", "post", {
         parameters: { header: { "Idempotency-Key": crypto.randomUUID() } },
@@ -151,7 +152,7 @@ export function AppointmentsWorkspace() {
   return <div className="mx-auto max-w-[1400px]">
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div><p className="eyebrow">{isPatient ? "Chăm sóc của bạn" : "Điều phối phòng khám"}</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.04em]">{isPatient ? "Lịch hẹn của tôi" : "Lịch khám"}</h1><p className="mt-2 text-sm text-[var(--muted)]">{isPatient ? "Xem, đặt hoặc đổi lịch khám của bạn." : "Lịch được lấy trực tiếp từ hệ thống đặt hẹn."}</p></div>
-      {canSchedule ? <Button onClick={beginCreate}><Plus size={16}/>{isPatient ? "Đặt lịch khám" : "Tạo lịch hẹn"}</Button> : null}
+      {canSchedule ? <Button disabled={isPatient&&(!currentPatientQuery.data||!!currentPatientQuery.data.archivedAt)} onClick={beginCreate}><Plus size={16}/>{isPatient ? "Đặt lịch khám" : "Tạo lịch hẹn"}</Button> : null}
     </div>
     {notice ? <div role="status" className="mt-5 rounded-xl border border-[#bfe2d7] bg-[#effaf6] px-4 py-3 text-sm text-[#236d5f]">{notice}</div> : null}
     {error && !panelOpen && !cancelTarget ? <div role="alert" className="mt-5 rounded-xl border border-[#f1c9c1] bg-[#fff3f0] px-4 py-3 text-sm text-[#a64f40]">{error}</div> : null}
@@ -181,6 +182,7 @@ export function AppointmentsWorkspace() {
       </article>)}</div> : null}
     </section>
 
+    {isPatient&&currentPatientQuery.data?.archivedAt?<p role="status" className="mt-4 rounded-xl bg-[#fff5ed] p-4 text-sm text-[#8c572d]">Hồ sơ đã lưu trữ. Bạn vẫn xem được lịch sử hẹn; vui lòng liên hệ lễ tân để khôi phục trước khi đặt lịch mới.</p>:null}
     {panelOpen ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#102a30]/45 p-3 sm:p-6" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) { setCreateOpen(false); setRescheduleTarget(null); setError(""); } }}>
       <section role="dialog" aria-modal="true" aria-labelledby="booking-title" className="max-h-[94vh] w-full max-w-[760px] overflow-y-auto rounded-[22px] bg-white p-5 shadow-2xl sm:p-7">
         <div className="flex items-start justify-between"><div><p className="eyebrow">Lịch khám · {isPatient ? "Đặt trực tuyến" : "Điều phối"}</p><h2 id="booking-title" className="mt-2 text-xl font-bold">{rescheduleTarget ? "Đổi lịch hẹn" : "Tạo lịch hẹn"}</h2></div><button className="focus-ring rounded-lg p-2 text-[var(--muted)] hover:bg-[#f2f6f5]" aria-label="Đóng" onClick={() => { setCreateOpen(false); setRescheduleTarget(null); setError(""); }}><X size={18}/></button></div>

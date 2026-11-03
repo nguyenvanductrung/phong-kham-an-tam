@@ -33,7 +33,7 @@ class NotificationEventConsumerIntegrationTest {
         DataSource dataSource = new DriverManagerDataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         jdbc = new JdbcTemplate(dataSource);
         Flyway.configure().dataSource(dataSource).locations("classpath:db/migration").load().migrate();
-        consumer = new NotificationEventConsumer(jdbc, JsonMapper.builder().build(), "noreply@antam.local");
+        consumer = new NotificationEventConsumer(new vn.phongkham.notification.persistence.JdbcNotificationEventConsumerDao(jdbc), JsonMapper.builder().build(), "noreply@antam.local");
     }
 
     @BeforeEach

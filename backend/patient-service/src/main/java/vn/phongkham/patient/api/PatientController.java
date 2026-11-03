@@ -27,9 +27,10 @@ public class PatientController {
     public PatientModels.PatientPage search(@RequestParam(defaultValue="") String q,
                                             @RequestParam(defaultValue="0") int page,
                                             @RequestParam(defaultValue="20") int size,
+                                            @RequestParam(defaultValue="ACTIVE") String status,
                                             @AuthenticationPrincipal Jwt jwt) {
         requireAny(jwt, ADMIN);
-        return patients.search(q, page, size);
+        return patients.search(q, page, size, status);
     }
 
     @PostMapping
@@ -62,7 +63,7 @@ public class PatientController {
             if (!patients.hasDoctorGrant(id, UUID.fromString(jwt.getSubject()))) throw forbidden();
             return patients.findSummary(id);
         }
-        if (ADMIN.containsAll(roles) || roles.stream().anyMatch(ADMIN::contains)) return patients.findSummary(id);
+        if (roles.stream().anyMatch(ADMIN::contains)) return patients.findSummary(id);
         throw forbidden();
     }
 
@@ -73,6 +74,27 @@ public class PatientController {
         if (roles.contains("PATIENT") && patients.isLinkedTo(id, userId)) return patients.findDetail(id);
         if (roles.contains("DOCTOR") && patients.hasDoctorGrant(id, userId)) return patients.findDetail(id);
         throw forbidden();
+    }
+
+    @PutMapping("/{id}")
+    public PatientModels.PatientSummary update(@PathVariable UUID id,@Valid @RequestBody PatientModels.UpdatePatientRequest body,
+                                               @AuthenticationPrincipal Jwt jwt,HttpServletRequest request) {
+        requireAny(jwt,ADMIN);return patients.update(id,body,UUID.fromString(jwt.getSubject()),trace(request));
+    }
+    @DeleteMapping("/{id}") @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable UUID id,@AuthenticationPrincipal Jwt jwt,HttpServletRequest request) {
+        requireAny(jwt,ADMIN);patients.delete(id,UUID.fromString(jwt.getSubject()),trace(request),jwt.getTokenValue());
+    }
+    @PostMapping("/{id}/archive")
+    public PatientModels.PatientSummary archive(@PathVariable UUID id,@AuthenticationPrincipal Jwt jwt,HttpServletRequest request) {
+        requireAny(jwt,ADMIN);return patients.setArchived(id,true,UUID.fromString(jwt.getSubject()),trace(request),jwt.getTokenValue());
+    }
+    @PostMapping("/{id}/restore")
+    public PatientModels.PatientSummary restore(@PathVariable UUID id,@AuthenticationPrincipal Jwt jwt,HttpServletRequest request) {
+        requireAny(jwt,ADMIN);return patients.setArchived(id,false,UUID.fromString(jwt.getSubject()),trace(request),jwt.getTokenValue());
+    }
+    private static String trace(HttpServletRequest request) {
+        Object value=request.getAttribute(CorrelationIdFilter.HEADER);return value==null?UUID.randomUUID().toString():value.toString();
     }
 
     @GetMapping("/{id}/account-link")
