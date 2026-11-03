@@ -3,10 +3,10 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { forwardRef, type ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
-const buttonVariants = cva("focus-ring inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition disabled:pointer-events-none disabled:opacity-45", {
+const buttonVariants = cva("focus-ring inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] font-semibold transition duration-150 active:translate-y-px disabled:pointer-events-none disabled:opacity-45", {
   variants: {
-    variant: { primary: "bg-[var(--teal)] text-white hover:bg-[var(--teal-dark)]", secondary: "border border-[var(--line)] bg-white text-[var(--ink)] hover:bg-[#f5f8f7]", ghost: "text-[var(--muted)] hover:bg-[var(--teal-soft)] hover:text-[var(--teal-dark)]", danger: "bg-[#fff0ed] text-[#a94f3e] hover:bg-[#ffe2dc]" },
-    size: { md: "min-h-10 px-4 text-sm", sm: "min-h-8 px-3 text-xs", lg: "min-h-12 px-5 text-sm", icon: "size-10" },
+    variant: { primary: "bg-[var(--teal)] text-white shadow-sm hover:bg-[var(--teal-dark)] hover:shadow", secondary: "border border-[var(--line)] bg-[var(--paper)] text-[var(--ink)] hover:bg-[var(--teal-soft)]", ghost: "text-[var(--muted)] hover:bg-[var(--teal-soft)] hover:text-[var(--teal-dark)]", danger: "bg-[#fff0ed] text-[#a94f3e] hover:bg-[#ffe2dc]" },
+    size: { md: "min-h-11 px-4 text-sm", sm: "min-h-10 px-3 text-xs", lg: "min-h-12 px-5 text-sm", icon: "size-11" },
   }, defaultVariants: { variant: "primary", size: "md" },
 });
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> { asChild?: boolean }
