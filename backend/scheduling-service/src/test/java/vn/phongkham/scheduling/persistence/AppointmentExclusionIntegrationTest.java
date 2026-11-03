@@ -109,7 +109,7 @@ class AppointmentExclusionIntegrationTest {
     }
 
     @Test void workingHoursRejectOverlappingIntervalsAndCannotRemoveCoverageForBookedVisits(){
-        SchedulingAdminService admin=new SchedulingAdminService(jdbc,"Asia/Ho_Chi_Minh");
+        SchedulingAdminService admin=new vn.phongkham.scheduling.application.SchedulingAdminServiceImpl(new JdbcSchedulingAdminDao(jdbc),"Asia/Ho_Chi_Minh");
         var request=new SchedulingAdminModels.WorkingHourRequest(DOCTOR,1,LocalTime.of(8,0),LocalTime.of(12,0),LocalDate.of(2030,1,7),null);
         UUID hourId=transaction.execute(status->admin.addWorkingHour(request,ACTOR,"admin-test").id());
         ApiException duplicate=assertThrows(ApiException.class,()->transaction.execute(status->admin.addWorkingHour(
@@ -122,7 +122,7 @@ class AppointmentExclusionIntegrationTest {
     }
 
     @Test void approvedLeaveAndClinicClosureCannotInvalidateBookedVisits(){
-        SchedulingAdminService admin=new SchedulingAdminService(jdbc,"Asia/Ho_Chi_Minh");
+        SchedulingAdminService admin=new vn.phongkham.scheduling.application.SchedulingAdminServiceImpl(new JdbcSchedulingAdminDao(jdbc),"Asia/Ho_Chi_Minh");
         Instant visit=Instant.parse("2030-01-07T01:00:00Z");
         insert(UUID.randomUUID(),visit,30);
         UUID leaveId=UUID.randomUUID();

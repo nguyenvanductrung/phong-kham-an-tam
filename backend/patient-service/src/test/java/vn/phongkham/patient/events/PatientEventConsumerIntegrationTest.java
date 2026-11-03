@@ -34,7 +34,7 @@ class PatientEventConsumerIntegrationTest {
         DataSource dataSource = new DriverManagerDataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         jdbc = new JdbcTemplate(dataSource);
         Flyway.configure().dataSource(dataSource).locations("classpath:db/migration").load().migrate();
-        consumer = new PatientEventConsumer(jdbc, JsonMapper.builder().build());
+        consumer = new PatientEventConsumer(new vn.phongkham.patient.persistence.JdbcPatientEventConsumerDao(jdbc), JsonMapper.builder().build());
     }
 
     @BeforeEach

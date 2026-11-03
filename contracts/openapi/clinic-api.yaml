@@ -61,6 +61,7 @@ paths:
       tags: [Patients]
       summary: Search administrative patient records (staff only)
       parameters:
+        - { name: status, in: query, schema: { type: string, enum: [ACTIVE, ARCHIVED, ALL], default: ACTIVE } }
         - { name: q, in: query, schema: { type: string } }
         - { name: page, in: query, schema: { type: integer, minimum: 0, default: 0 } }
         - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
@@ -86,6 +87,78 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/PatientSummary' }
         '400': { $ref: '#/components/responses/Problem' }
+  /api/v1/patients/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Patients]
+      summary: Read a patient record, including archived history, subject to role and ownership
+      responses:
+        '200':
+          description: Administrative summary for administrative staff; clinical fields remain role restricted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PatientSummary' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+    put:
+      tags: [Patients]
+      summary: Update administrative fields of an active patient (receptionist or manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdatePatient' }
+      responses:
+        '200':
+          description: Updated summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PatientSummary' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+    delete:
+      tags: [Patients]
+      summary: Permanently delete an unused patient; reject records with appointments, links, consents or grants
+      responses:
+        '204': { description: Deleted; audit remains }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
+  /api/v1/patients/{id}/archive:
+    post:
+      tags: [Patients]
+      summary: Archive patient after all active appointments have been completed or cancelled
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Archived summary; history remains readable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PatientSummary' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
+  /api/v1/patients/{id}/restore:
+    post:
+      tags: [Patients]
+      summary: Restore an archived patient so staff can edit and book again
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Active summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PatientSummary' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
   /api/v1/patients/me:
     get:
       tags: [Patients]
@@ -864,6 +937,18 @@ components:
         emergencyPhone: { type: [string, 'null'], maxLength: 32 }
         allergies: { type: [string, 'null'], maxLength: 1000 }
         medicalHistory: { type: [string, 'null'], maxLength: 4000 }
+    UpdatePatient:
+      type: object
+      required: [fullName, phone]
+      properties:
+        fullName: { type: string, minLength: 2, maxLength: 200 }
+        phone: { type: string, minLength: 8, maxLength: 32 }
+        email: { type: [string, 'null'], maxLength: 254 }
+        gender: { type: [string, 'null'], enum: [MALE, FEMALE, OTHER, null] }
+        dateOfBirth: { type: [string, 'null'], format: date }
+        address: { type: [string, 'null'], maxLength: 500 }
+        emergencyContact: { type: [string, 'null'], maxLength: 500 }
+        emergencyPhone: { type: [string, 'null'], maxLength: 32 }
     CreateAppointment:
       type: object
       required: [patientId, doctorId, chairId, serviceId, scheduledAt, durationMinutes]
@@ -891,6 +976,7 @@ components:
         emergencyContact: { type: [string, 'null'] }
         emergencyPhone: { type: [string, 'null'] }
         createdAt: { type: string, format: date-time }
+        archivedAt: { type: [string, 'null'], format: date-time, description: Null for active records; otherwise the archive timestamp }
     PatientPage:
       type: object
       required: [items, page, size, hasNext]

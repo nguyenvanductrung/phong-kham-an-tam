@@ -7,7 +7,7 @@
 ## Mục tiêu và chức năng
 
 - Quản lý tài khoản và quyền theo vai trò: lễ tân, bác sĩ, bệnh nhân, quản lý.
-- Tạo và quản lý hồ sơ hành chính bệnh nhân; tìm kiếm và liên kết hồ sơ với tài khoản.
+- Tạo, sửa và tìm kiếm hồ sơ hành chính bệnh nhân; xóa hồ sơ chưa sử dụng, lưu trữ/khôi phục và liên kết hồ sơ với tài khoản.
 - Đặt, xác nhận, tiếp đón, đổi và hủy lịch; kiểm tra lịch bác sĩ, ghế, ngày nghỉ và lịch đóng cửa.
 - Quản lý dịch vụ, ghế, ca làm, ngày nghỉ và lịch làm việc của phòng khám.
 - Tạo bệnh án từ lịch khám, lưu bản nháp, ghi nhận răng và thủ thuật, chốt bệnh án, lập đơn thuốc và kế hoạch điều trị.
@@ -136,6 +136,7 @@ Mỗi service sở hữu dữ liệu riêng; giao tiếp giữa service dùng AP
 - Sequence diagram cho luồng đặt lịch và chốt bệnh án: [docs/api/sequences.md](docs/api/sequences.md).
 - Tổng quan kiến trúc và luồng giữa các service: [docs/architecture/overview.md](docs/architecture/overview.md).
 - ERD và quyền sở hữu dữ liệu: [docs/database/erd.md](docs/database/erd.md), [docs/database/ownership.md](docs/database/ownership.md).
+- Tầng DAO, interface nghiệp vụ, CRUD bệnh nhân và quy tắc lưu trữ/xóa: [docs/architecture/dao-and-patient-lifecycle.md](docs/architecture/dao-and-patient-lifecycle.md).
 - Quy tắc nghiệp vụ: [docs/business-rules-summary.md](docs/business-rules-summary.md).
 - API contract: `contracts/openapi/clinic-api.yaml`.
 - Kế hoạch và các trường hợp kiểm thử: [docs/testing/backend-test-plan.md](docs/testing/backend-test-plan.md).

@@ -84,6 +84,6 @@ Lệnh `down` dừng và xóa các container thuộc stack phòng khám, nhưng 
 - **Không kết nối được Docker Engine:** mở Docker Desktop, chờ engine khởi động xong rồi kiểm tra `docker --context default info`. Nếu Docker Desktop đang dùng context khác, chọn đúng context hoặc dùng context mà Docker Desktop hiển thị.
 - **Compose báo container chưa healthy:** xem `docker compose ... ps` và log service lỗi bằng lệnh ở mục trên. Có thể chờ thêm một chút khi database chạy migration lần đầu.
 - **Docker quá tải hoặc không phản hồi:** dừng các stack không dùng trong Docker Desktop rồi chờ engine ổn định. Lần đầu nên chạy lệnh build một lần; những lần mở lại dùng lệnh không có `--build`.
-- **Cổng đã được sử dụng:** kiểm tra tiến trình/container đang chiếm cổng. Có thể đổi các cổng host `RABBITMQ_HOST_PORT`, `RABBITMQ_MANAGEMENT_HOST_PORT`, `REDIS_HOST_PORT` và `GATEWAY_HOST_PORT` trong `.env`.
+- **Cổng đã được sử dụng:** kiểm tra tiến trình/container đang chiếm cổng. Có thể đổi các cổng host `POSTGRES_HOST_PORT`, `RABBITMQ_HOST_PORT`, `RABBITMQ_MANAGEMENT_HOST_PORT`, `REDIS_HOST_PORT` và `GATEWAY_HOST_PORT` trong `.env`. Cổng PostgreSQL mặc định là `5432`; kết nối pgAdmin dùng giá trị `POSTGRES_HOST_PORT`.
 
 Xem [runbook local development](runbooks/local-development.md) để biết thêm chi tiết về vận hành và backup/restore.

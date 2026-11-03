@@ -9,9 +9,12 @@
 **/coverage/
 playwright-report/
 test-results/
+output/
 data/
 *.log
 .idea/
 *.iml
 .vscode/
+.DS_Store
+Thumbs.db
 
