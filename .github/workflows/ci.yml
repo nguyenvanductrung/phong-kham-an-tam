@@ -14,10 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '24.22.1', cache: pnpm, cache-dependency-path: frontend/web/pnpm-lock.yaml }
       - uses: pnpm/action-setup@v4
         with: { version: '12.15.0' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '24.22.1', cache: pnpm, cache-dependency-path: frontend/web/pnpm-lock.yaml }
       - run: pnpm --dir frontend/web install --frozen-lockfile
       - run: pnpm --dir frontend/web api:generate
       - run: git diff --exit-code -- frontend/web/src/lib/api.generated.ts
