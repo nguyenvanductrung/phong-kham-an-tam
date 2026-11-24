@@ -207,6 +207,7 @@ test("staff can edit, archive, restore and delete an unused patient record", asy
   await expect(dialog).not.toBeVisible();
   await page.getByLabel("Tìm bệnh nhân", { exact: true }).fill(updatedName);
   await expect(page.getByRole("row").filter({ hasText: updatedName })).toContainText("0911111111");
+  await page.getByRole("row").filter({ hasText: updatedName }).click();
   await page.getByRole("button", { name: "Lưu trữ", exact: true }).click();
   dialog = page.getByRole("dialog", { name: "Lưu trữ hồ sơ" });
   await dialog.getByRole("button", { name: "Lưu trữ hồ sơ", exact: true }).click();
