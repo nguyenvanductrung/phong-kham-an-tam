@@ -1,0 +1,46 @@
+Kiểm thử phân trang bệnh nhân — 2026-11-24 (Asia/Bangkok)
+
+Kết quả chạy lại theo yêu cầu nghiệm thu: PASS 14/14 kịch bản trình duyệt, 69 request danh sách được quan sát, không có lỗi JavaScript runtime.
+
+Phạm vi: PatientsWorkspace thật và các component tạo/sửa/lifecycle/liên kết tài khoản; Chromium (Chrome), Next.js dev cổng 3100, API được giả lập bằng Playwright route. SessionProvider dùng tài khoản quản lý giả lập trong trang kiểm thử tạm. Trang tạm đã được xóa sau kiểm thử.
+
+Dữ liệu: 101 hồ sơ ACTIVE, 21 hồ sơ ARCHIVED; API trả items, page, size, hasNext đúng hợp đồng hiện tại.
+
+Các kịch bản đạt:
+1. Duyệt 101 hồ sơ qua trang đầu/giữa/cuối, không trùng hoặc thiếu; khoảng 1–50, 51–100, 101–101 chính xác. Trước bị khóa ở trang đầu, Tiếp bị khóa khi hasNext=false.
+2. Chuyển trang xóa panel chi tiết/tìm tài khoản cũ; chọn size 20/50/100 hoạt động và đưa về trang đầu.
+3. Tìm kiếm debounce từ trang sau gửi từ khóa mới với page=0; chuyển trang giữ từ khóa; kết quả đơn khóa hai nút.
+4. Đổi trạng thái về page=0; sang trang giữ ARCHIVED; ALL và kết quả tìm kiếm rỗng đúng.
+5. Request chậm khóa hai nút; bấm liên tiếp không gửi trùng hoặc nhảy trang.
+6. HTTP 503 hiện lỗi riêng, không hiện thông báo danh sách rỗng; Thử lại giữ page; Trước đưa về trang đã tải được.
+7. Phản hồi tìm kiếm cũ đến sau không thay kết quả từ khóa mới.
+8. Xóa hồ sơ cuối trang cuối tự về trang đầu và đóng chi tiết cũ.
+9. Lưu trữ hồ sơ cuối trang cuối tự về trang đầu và đóng chi tiết cũ.
+10. Khôi phục hồ sơ cuối trang ARCHIVED tự về trang đầu và đóng chi tiết cũ.
+11. Sửa hồ sơ ở trang sau giữ trang và cập nhật bảng/panel; tạo hồ sơ giữ panel mới và tìm được hồ sơ vừa tạo.
+12. Điều khiển phân trang vừa chiều rộng 375px và đủ nút/chọn size.
+13. Trang đầu phân biệt rõ đang tải, không có hồ sơ và lỗi 503; thử lại tải được dữ liệu, hai nút khóa đúng trong lúc tải.
+14. Dùng Enter để sang trang, Space để về trang trước, Enter để chọn bệnh nhân và bàn phím để đổi size; panel cũ được đóng khi đổi size.
+
+Kiểm tra tĩnh (thư mục frontend/web):
+- node node_modules/typescript/bin/tsc --noEmit: PASS.
+- node node_modules/eslint/bin/eslint.js .: PASS.
+- git diff --check -- frontend/web/src/components/patients-workspace.tsx (từ root): PASS.
+
+Lệnh kiểm thử trình duyệt:
+Từ root repository, dùng Playwright CLI đã có trong npm cache vì registry không truy cập được:
+node C:/Users/Admin/AppData/Local/npm-cache/_npx/31e32ef8478fbf80/node_modules/@playwright/cli/playwright-cli.js -s=patient-pagination open --browser chrome
+node C:/Users/Admin/AppData/Local/npm-cache/_npx/31e32ef8478fbf80/node_modules/@playwright/cli/playwright-cli.js -s=patient-pagination run-code --filename output/playwright/patient-pagination-check.js
+node C:/Users/Admin/AppData/Local/npm-cache/_npx/31e32ef8478fbf80/node_modules/@playwright/cli/playwright-cli.js -s=patient-pagination close
+
+Khởi chạy frontend từ frontend/web:
+node node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port 3100
+
+Sau kiểm thử: dừng dev server, xóa trang kiểm thử tạm và cache type dev có tham chiếu trang tạm, khôi phục next-env.d.ts về trạng thái trước khi chạy, chạy lại typecheck. Giữ các thay đổi sẵn có khác trong working tree.
+
+Artifact cục bộ (output/ được gitignore):
+- output/playwright/patient-pagination-check.js: mã kiểm thử với assertions và API fixtures.
+- output/playwright/patient-pagination-harness.tsx: bản sao trang mount component để chạy lại tại frontend/web/src/app/pagination-check/page.tsx; chỉ dùng tạm khi kiểm thử, xóa sau khi chạy.
+- output/playwright/patient-pagination-mobile.png: ảnh kiểm tra điều khiển trên màn hình 375px.
+
+Giới hạn: Docker daemon chưa chạy, không có stack backend khả dụng; chưa chạy E2E với đăng nhập, BFF và backend/database thật. Các assertions API trong báo cáo này xác minh request từ giao diện và hành vi với response giả lập theo hợp đồng, không xác minh backend.

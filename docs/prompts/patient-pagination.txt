@@ -1,0 +1,24 @@
+Hoàn thiện phân trang màn hình bệnh nhân trong repository PhongKham rồi kiểm thử.
+
+Bối cảnh:
+- GET /api/v1/patients đã nhận q, status, page (bắt đầu từ 0), size (tối đa 100), trả items, page, size, hasNext; không có tổng số hồ sơ hoặc tổng số trang.
+- frontend/web/src/components/patients-workspace.tsx đang cố định page=0, size=50.
+- Tham chiếu backend/patient-service/src/main/java/vn/phongkham/patient/api/PatientController.java và mục R11 của docs/reviews/frontend-backend-role-audit-2026-11-04.md.
+
+Yêu cầu nghiệm thu:
+1. Phân trang phía server bằng API hiện có. Query key chứa từ khóa, trạng thái, page và size; truyền AbortSignal để hủy request cũ.
+2. Có nút Trước/Tiếp, hiển thị số trang từ 1 và khoảng hồ sơ đang xem. Trước bị khóa ở trang đầu, Tiếp phụ thuộc hasNext. Không suy đoán tổng số hồ sơ/trang.
+3. Mặc định 50 hồ sơ/trang; cho chọn 20, 50, 100. Đổi size, từ khóa hoặc trạng thái phải về page=0, xóa lựa chọn bệnh nhân và thông tin liên kết tài khoản cũ.
+4. Giữ debounce tìm kiếm, không gửi từ khóa mới với page của bộ lọc cũ. Khóa chuyển trang khi đang tải hoặc chờ debounce; phản hồi cũ không ghi đè kết quả mới.
+5. Giữ trạng thái loading, empty, error và Thử lại. Không coi lỗi API là danh sách rỗng; cho quay về trang trước khi tải trang sau thất bại.
+6. Sau sửa/xóa/lưu trữ/khôi phục, vô hiệu hóa cache danh sách như hiện có. Nếu trang sau trở thành rỗng, tự về trang đầu. Không làm hỏng tạo hồ sơ và panel chi tiết.
+7. Giao diện tiếng Việt, dùng được trên màn hình nhỏ và có nhãn truy cập bằng bàn phím/trình đọc màn hình.
+8. Giữ các thay đổi sẵn có trong working tree; chỉ sửa phạm vi phân trang bệnh nhân, không sửa API hay quyền truy cập nếu không cần thiết.
+
+Kiểm thử:
+- Chạy typecheck và lint frontend.
+- Dùng trình duyệt với hơn 50 hồ sơ: trang đầu/giữa/cuối, Trước/Tiếp, hasNext=false, không lặp/bỏ sót khi dữ liệu đứng yên.
+- Kiểm tra đổi size, tìm kiếm và đổi trạng thái từ trang sau; xác nhận request bắt đầu lại ở page=0 và giữ bộ lọc khi chuyển trang.
+- Kiểm tra loading, bấm liên tiếp, phản hồi đến sai thứ tự, lỗi API/thử lại, kết quả rỗng và xóa/lưu trữ/khôi phục hồ sơ cuối trang.
+- Kiểm tra tạo/sửa hồ sơ vẫn cập nhật danh sách và panel chi tiết.
+- Nêu rõ các lệnh đã chạy, kết quả và phần bị giới hạn bởi môi trường. Nếu dùng API giả lập, phân biệt với E2E chạy backend thật.
